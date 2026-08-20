@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Catálogo de Filmes de Tom Hanks — Busque, favorite e comente os melhores filmes.">
+    <title>{% block title %}Catálogo Tom Hanks{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    {% if user %}
+    <nav class="navbar">
+        <a href="/catalog" class="navbar-brand">
+            <span class="icon">🎬</span>
+            Tom Hanks Films
+        </a>
+        <div class="navbar-links">
+            <a href="/catalog" class="{{ 'active' if active_page == 'catalog' else '' }}">🎞️ Catálogo</a>
+            <a href="/favorites" class="{{ 'active' if active_page == 'favorites' else '' }}">⭐ Favoritos</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="navbar-user">
+                <div class="user-icon">{{ user.nome[0]|upper }}</div>
+                <span>{{ user.nome }}</span>
+            </div>
+            <a href="/logout" class="btn btn-ghost btn-sm">Sair</a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

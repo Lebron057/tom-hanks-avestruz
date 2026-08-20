@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Catálogo — Filmes de Tom Hanks{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>Filmes de Tom Hanks</h1>
+        <p>Explore a filmografia completa e favorite seus filmes preferidos</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error" style="max-width: 600px; margin: 0 auto 2rem;">⚠️ {{ error }}</div>
+    {% endif %}
+
+    {% if message %}
+    <div class="alert alert-success" style="max-width: 600px; margin: 0 auto 2rem;">✅ {{ message }}</div>
+    {% endif %}
+
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar filme..." oninput="filterMovies()">
+    </div>
+
+    <div style="text-align: center;">
+        <div class="stats-badge">
+            🎬 <span class="count">{{ movies|length }}</span> filmes encontrados
+        </div>
+    </div>
+
+    <div class="movie-grid" id="movieGrid">
+        {% for movie in movies %}
+        <div class="movie-card" data-title="{{ movie.title|lower }}">
+            <div class="poster-wrapper">
+                {% if movie.poster_url %}
+                <img src="{{ movie.poster_url }}" alt="Pôster de {{ movie.title }}" loading="lazy">
+                {% else %}
+                <div class="no-poster">🎬</div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <h3>{{ movie.title }}</h3>
+                {% if movie.release_date %}
+                <div class="year">{{ movie.release_date[:4] }}</div>
+                {% endif %}
+                <p class="overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
+                <div class="card-actions">
+                    {% if movie.id in favorited_ids %}
+                    <form method="POST" action="/favorite/{{ movie.id }}/remove" style="display:inline;">
+                        <button type="submit" class="btn btn-favorite btn-sm is-favorited" title="Remover dos favoritos">
+                            ★ Favoritado
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="/favorite/{{ movie.id }}" style="display:inline;">
+                        <input type="hidden" name="titulo" value="{{ movie.title }}">
+                        <input type="hidden" name="poster_path" value="{{ movie.poster_url or '' }}">
+                        <button type="submit" class="btn btn-favorite btn-sm" title="Adicionar aos favoritos">
+                            ☆ Favoritar
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="comment-inline">
+                    <form method="POST" action="/comment/{{ movie.id }}" style="display:flex; gap:0.5rem; width:100%;">
+                        <input type="hidden" name="titulo" value="{{ movie.title }}">
+                        <input type="text" name="texto" placeholder="Comentar..." required>
+                        <button type="submit" class="btn btn-primary btn-sm">💬</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not movies %}
+    <div class="empty-state">
+        <div class="icon">🎬</div>
+        <h3>Nenhum filme encontrado</h3>
+        <p>Verifique sua chave de API do TMDB e tente novamente.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterMovies() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const cards = document.querySelectorAll('.movie-card');
+    cards.forEach(card => {
+        const title = card.getAttribute('data-title');
+        card.style.display = title.includes(query) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

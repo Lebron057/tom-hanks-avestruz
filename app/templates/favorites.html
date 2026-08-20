@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Meus Favoritos — Catálogo Tom Hanks{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>Meus Favoritos</h1>
+        <p>Seus filmes favoritos e comentários pessoais</p>
+    </div>
+
+    {% if message %}
+    <div class="alert alert-success" style="max-width: 600px; margin: 0 auto 2rem;">✅ {{ message }}</div>
+    {% endif %}
+
+    {% if favorites %}
+    <div style="text-align: center;">
+        <div class="stats-badge">
+            ⭐ <span class="count">{{ favorites|length }}</span> filme{{ 's' if favorites|length != 1 else '' }} favoritado{{ 's' if favorites|length != 1 else '' }}
+        </div>
+    </div>
+
+    <div class="favorites-list">
+        {% for fav in favorites %}
+        <div class="favorite-item">
+            <div class="poster-thumb">
+                {% if fav.poster_path %}
+                <img src="{{ fav.poster_path }}" alt="Pôster de {{ fav.titulo }}">
+                {% else %}
+                <div style="width:100px;height:150px;background:var(--bg-secondary);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--text-muted);">🎬</div>
+                {% endif %}
+            </div>
+            <div class="fav-content">
+                <h3>{{ fav.titulo }}</h3>
+                <div class="fav-date">Favoritado em {{ fav.criado_em.strftime('%d/%m/%Y às %H:%M') if fav.criado_em else '' }}</div>
+
+                <div class="fav-actions">
+                    <form method="POST" action="/favorite/{{ fav.tmdb_movie_id }}/remove">
+                        <button type="submit" class="btn btn-danger btn-sm">🗑️ Remover</button>
+                    </form>
+                </div>
+
+                <div class="comments-section">
+                    <h4>💬 Comentários</h4>
+
+                    {% if fav.comentarios %}
+                        {% for comment in fav.comentarios %}
+                        <div class="comment-item">
+                            <div>
+                                <p>{{ comment.texto }}</p>
+                                <span class="comment-date">{{ comment.criado_em.strftime('%d/%m/%Y %H:%M') if comment.criado_em else '' }}</span>
+                            </div>
+                            <form method="POST" action="/comment/{{ comment.id }}/remove">
+                                <button type="submit" class="btn btn-ghost btn-sm" title="Remover comentário">✕</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem 0;">Nenhum comentário ainda.</p>
+                    {% endif %}
+
+                    <div class="comment-form">
+                        <form method="POST" action="/comment/{{ fav.tmdb_movie_id }}" style="display:flex; gap:0.5rem; width:100%;">
+                            <input type="hidden" name="titulo" value="{{ fav.titulo }}">
+                            <input type="text" name="texto" placeholder="Adicionar comentário..." required>
+                            <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">⭐</div>
+        <h3>Nenhum favorito ainda</h3>
+        <p>Explore o catálogo e favorite seus filmes preferidos!</p>
+        <a href="/catalog" class="btn btn-primary">🎬 Ir para o Catálogo</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
