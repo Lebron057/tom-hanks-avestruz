@@ -1,15 +1,53 @@
 version: "3.8"
 
 services:
-  web:
-    build: .
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: catalog-service
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY}
       - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - SECRET_KEY=${SECRET_KEY}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8001}
+    depends_on:
+      - auth-service
+    networks:
+      - internal-net
     restart: unless-stopped
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-service
+    command: ["uvicorn", "auth_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    expose:
+      - "8001"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - SECRET_KEY=${SECRET_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-2525}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM:-noreply@catalogofilmes.com}
+    networks:
+      - internal-net
+    restart: unless-stopped
+
+networks:
+  internal-net:
+    driver: bridge
+
