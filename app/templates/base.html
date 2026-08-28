@@ -22,6 +22,9 @@
             <div class="navbar-user">
                 <div class="user-icon">{{ user.nome[0]|upper }}</div>
                 <span>{{ user.nome }}</span>
+                {% if user.role == 'admin' %}
+                <span style="background: rgba(252, 92, 124, 0.2); color: #fc5c7c; font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(252, 92, 124, 0.4); text-transform: uppercase;">Admin</span>
+                {% endif %}
             </div>
             <a href="/logout" class="btn btn-ghost btn-sm">Sair</a>
         </div>
