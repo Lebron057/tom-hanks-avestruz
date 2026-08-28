@@ -141,3 +141,8 @@ Acesse no navegador:
 └── README.md                   # Documentação do projeto
 ```
 
+## ✉️ Imagem do mailtrap recebendo e-mail
+![alt text](image.png)
+
+## ✉️ imagem do sistema ao tentar acessar o link de recuperação de senha após 30 minutos ou após já ter utilizado
+![alt text](image-1.png)
