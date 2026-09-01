@@ -392,19 +392,40 @@ async def remove_comment(request: Request, comment_id: int):
         return RedirectResponse(url="/login", status_code=302)
 
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
-        # Proteção IDOR: só apaga se pertence ao usuário logado
+        # RBAC: Buscar o comentário para verificar a quem pertence
         cursor.execute(
-            "DELETE FROM comentarios WHERE id = %s AND usuario_id = %s",
-            (comment_id, user["id"]),
+            "SELECT id, usuario_id FROM comentarios WHERE id = %s",
+            (comment_id,),
         )
+        comment = cursor.fetchone()
+
+        if not comment:
+            raise HTTPException(status_code=404, detail="Comentário não encontrado.")
+
+        # Enforcement centralizado (Padrão A):
+        # O role do usuário vem do auth-service (já validado via /auth/verify).
+        # - admin: pode apagar QUALQUER comentário (moderação)
+        # - user:  só pode apagar os PRÓPRIOS comentários
+        is_owner = comment["usuario_id"] == user["id"]
+        is_admin = user.get("role", "user") == "admin"
+
+        if not is_owner and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso negado: você não tem permissão para apagar este comentário.",
+            )
+
+        cursor.execute("DELETE FROM comentarios WHERE id = %s", (comment_id,))
         conn.commit()
     finally:
         cursor.close()
         conn.close()
 
-    return RedirectResponse(url="/favorites?message=Comentário+removido!", status_code=302)
+    referer = request.headers.get("referer", "/favorites")
+    redirect_url = "/favorites?message=Comentário+removido!" if "favorites" in referer else "/catalog?message=Comentário+removido!"
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 
 @app.get("/favorites", response_class=HTMLResponse)
@@ -424,14 +445,28 @@ async def favorites_page(request: Request, message: str = None):
         )
         favorites = cursor.fetchall()
 
-        # Buscar comentários do usuário para cada filme favoritado
+        # Buscar comentários para cada filme favoritado
+        # Admin vê TODOS os comentários (moderação); usuário comum vê apenas os próprios
+        is_admin = user.get("role", "user") == "admin"
         for fav in favorites:
-            cursor.execute(
-                """SELECT id, texto, criado_em FROM comentarios
-                   WHERE usuario_id = %s AND tmdb_movie_id = %s
-                   ORDER BY criado_em ASC""",
-                (user["id"], fav["tmdb_movie_id"]),
-            )
+            if is_admin:
+                cursor.execute(
+                    """SELECT c.id, c.usuario_id, c.texto, c.criado_em, u.nome AS autor_nome
+                       FROM comentarios c
+                       JOIN usuarios u ON c.usuario_id = u.id
+                       WHERE c.tmdb_movie_id = %s
+                       ORDER BY c.criado_em ASC""",
+                    (fav["tmdb_movie_id"],),
+                )
+            else:
+                cursor.execute(
+                    """SELECT c.id, c.usuario_id, c.texto, c.criado_em, u.nome AS autor_nome
+                       FROM comentarios c
+                       JOIN usuarios u ON c.usuario_id = u.id
+                       WHERE c.usuario_id = %s AND c.tmdb_movie_id = %s
+                       ORDER BY c.criado_em ASC""",
+                    (user["id"], fav["tmdb_movie_id"]),
+                )
             fav["comentarios"] = cursor.fetchall()
 
     finally:
