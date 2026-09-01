@@ -44,14 +44,28 @@
 
                     {% if fav.comentarios %}
                         {% for comment in fav.comentarios %}
-                        <div class="comment-item">
+                        {% set is_own_comment = (comment.usuario_id == user.id) %}
+                        <div class="comment-item" {% if not is_own_comment %}style="border-left: 3px solid #f59e0b; padding-left: 0.75rem;"{% endif %}>
                             <div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                    <strong style="font-size: 0.8rem; color: var(--text-muted);">
+                                        {{ comment.autor_nome if comment.autor_nome else 'Anônimo' }}
+                                    </strong>
+                                    {% if is_own_comment %}
+                                        <span style="font-size: 0.65rem; background: #22c55e; color: #fff; padding: 1px 6px; border-radius: 8px;">Você</span>
+                                    {% else %}
+                                        <span style="font-size: 0.65rem; background: #f59e0b; color: #fff; padding: 1px 6px; border-radius: 8px;">Outro usuário</span>
+                                    {% endif %}
+                                </div>
                                 <p>{{ comment.texto }}</p>
                                 <span class="comment-date">{{ comment.criado_em.strftime('%d/%m/%Y %H:%M') if comment.criado_em else '' }}</span>
                             </div>
+                            {# Botão aparece apenas para quem tem permissão (backend também valida com HTTP 403) #}
+                            {% if is_own_comment or user.role == 'admin' %}
                             <form method="POST" action="/comment/{{ comment.id }}/remove">
                                 <button type="submit" class="btn btn-ghost btn-sm" title="Remover comentário">✕</button>
                             </form>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     {% else %}
