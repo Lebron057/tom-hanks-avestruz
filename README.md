@@ -2,7 +2,7 @@
 
 Aplicação web desenvolvida em arquitetura de microsserviços com Python (FastAPI) e Docker. Permite explorar a filmografia de Tom Hanks ao vivo da API TMDB, favoritar filmes, comentar, controlar papéis de acesso e redefinir senhas com envio de e-mails via Mailtrap.
 
-professor: @siriani
+**Professor:** [@siriani](https://github.com/siriani)
 
 ---
 
@@ -53,6 +53,46 @@ A aplicação foi decomposta em dois serviços independentes interconectados via
 - 🎞️ **Catálogo TMDB ao Vivo**: Busca de filmes em tempo real na API TMDB (sem salvar o catálogo desnecessariamente no banco).
 - ⭐ **Favoritos & Comentários**: Dados segregados e protegidos contra IDOR gravados no MariaDB individual.
 - 🛡️ **Segurança Total**: Nenhuma credencial ou chave hardcoded no código; injeção estrita via variáveis de ambiente.
+- 🔒 **Autorização RBAC**: Controle de acesso baseado em papéis (`user` / `admin`) com enforcement no backend.
+
+---
+
+## 🔒 Autorização — RBAC (Role-Based Access Control)
+
+O sistema implementa controle de acesso baseado em papéis. O campo `role` na tabela `usuarios` define as permissões de cada conta.
+
+### Permissões por Papel
+
+| Ação | `user` (usuário comum) | `admin` (administrador) |
+|------|:---:|:---:|
+| Visualizar catálogo de filmes | ✅ | ✅ |
+| Favoritar / Desfavoritar filmes | ✅ | ✅ |
+| Adicionar comentários | ✅ | ✅ |
+| Apagar **próprios** comentários | ✅ | ✅ |
+| Apagar comentários **de outros usuários** (Moderação) | ❌ (HTTP 403) | ✅ |
+| Visualizar comentários de outros usuários | ❌ | ✅ |
+
+### Padrão de Arquitetura: Padrão A — Enforcement Centralizado
+
+Neste projeto utilizamos o **Padrão A (Enforcement Centralizado no Gateway)**. O fluxo funciona assim:
+
+1. O usuário faz login e recebe um **token JWT** (emitido pelo `auth-service`).
+2. A cada requisição protegida, o `catalog-service` envia o token para o endpoint `/auth/verify` do `auth-service`.
+3. O `auth-service` decodifica o JWT, consulta o banco de dados e retorna os dados do usuário **incluindo o `role`**.
+4. O `catalog-service` recebe o `role` e **decide localmente** se autoriza ou nega a ação (ex: retornar `HTTP 403 Forbidden`).
+
+**Vantagem:** A fonte de verdade do papel do usuário é sempre o banco de dados. Se um admin for rebaixado para `user`, a mudança é instantânea — na próxima requisição ele já perde os privilégios.
+
+### O que mudaria com o Padrão B — Claims no JWT?
+
+No **Padrão B**, o `role` seria incluído diretamente dentro do payload (claims) do token JWT no momento da emissão. O `catalog-service` decodificaria o token **localmente** (sem consultar o `auth-service` a cada requisição) e leria o `role` direto do JWT.
+
+**Mudanças no código:**
+- O `auth-service` incluiria `"role": "admin"` no payload do JWT durante o login.
+- O `catalog-service` não precisaria mais chamar `/auth/verify`. Bastaria decodificar o JWT localmente com a `SECRET_KEY` compartilhada.
+- A função `verify_token()` em `app/auth.py` seria substituída por uma decodificação local usando `python-jose`.
+
+**Trade-off:** Maior performance (sem chamada HTTP a cada request), porém o `role` fica "congelado" no token até ele expirar. Se um admin for rebaixado, ele mantém os privilégios até o JWT expirar ou ser invalidado manualmente.
 
 ---
 
