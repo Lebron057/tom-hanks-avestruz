@@ -29,15 +29,19 @@
     <div class="movie-grid" id="movieGrid">
         {% for movie in movies %}
         <div class="movie-card" data-title="{{ movie.title|lower }}">
-            <div class="poster-wrapper">
-                {% if movie.poster_url %}
-                <img src="{{ movie.poster_url }}" alt="Pôster de {{ movie.title }}" loading="lazy">
-                {% else %}
-                <div class="no-poster">🎬</div>
-                {% endif %}
-            </div>
+            <a href="/movie/{{ movie.id }}" class="card-link">
+                <div class="poster-wrapper">
+                    {% if movie.poster_url %}
+                    <img src="{{ movie.poster_url }}" alt="Pôster de {{ movie.title }}" loading="lazy">
+                    {% else %}
+                    <div class="no-poster">🎬</div>
+                    {% endif %}
+                </div>
+            </a>
             <div class="card-body">
-                <h3>{{ movie.title }}</h3>
+                <a href="/movie/{{ movie.id }}" class="card-title-link">
+                    <h3>{{ movie.title }}</h3>
+                </a>
                 {% if movie.release_date %}
                 <div class="year">{{ movie.release_date[:4] }}</div>
                 {% endif %}
@@ -58,13 +62,7 @@
                         </button>
                     </form>
                     {% endif %}
-                </div>
-                <div class="comment-inline">
-                    <form method="POST" action="/comment/{{ movie.id }}" style="display:flex; gap:0.5rem; width:100%;">
-                        <input type="hidden" name="titulo" value="{{ movie.title }}">
-                        <input type="text" name="texto" placeholder="Comentar..." required>
-                        <button type="submit" class="btn btn-primary btn-sm">💬</button>
-                    </form>
+                    <a href="/movie/{{ movie.id }}" class="btn btn-ghost btn-sm">🔍 Detalhes</a>
                 </div>
             </div>
         </div>

@@ -24,7 +24,7 @@ from app.auth import (
     validate_reset_token,
     reset_password,
 )
-from app.tmdb import get_tom_hanks_movies
+from app.tmdb import get_tom_hanks_movies, get_movie_details
 
 
 # ── Lifespan ────────────────────────────────────────────
@@ -381,7 +381,12 @@ async def add_comment(
         conn.close()
 
     referer = request.headers.get("referer", "/catalog")
-    redirect_url = "/favorites?message=Comentário+adicionado!" if "favorites" in referer else "/catalog?message=Comentário+adicionado!"
+    if f"/movie/{tmdb_movie_id}" in referer or "movie" in referer:
+        redirect_url = f"/movie/{tmdb_movie_id}?message=Comentário+adicionado!"
+    elif "favorites" in referer:
+        redirect_url = "/favorites?message=Comentário+adicionado!"
+    else:
+        redirect_url = "/catalog?message=Comentário+adicionado!"
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
@@ -424,8 +429,80 @@ async def remove_comment(request: Request, comment_id: int):
         conn.close()
 
     referer = request.headers.get("referer", "/favorites")
-    redirect_url = "/favorites?message=Comentário+removido!" if "favorites" in referer else "/catalog?message=Comentário+removido!"
+    if "/movie/" in referer:
+        # Extrair o movie_id do referer para redirecionar de volta à página de detalhes
+        import re
+        match = re.search(r"/movie/(\d+)", referer)
+        if match:
+            redirect_url = f"/movie/{match.group(1)}?message=Comentário+removido!"
+        else:
+            redirect_url = "/favorites?message=Comentário+removido!"
+    elif "favorites" in referer:
+        redirect_url = "/favorites?message=Comentário+removido!"
+    else:
+        redirect_url = "/catalog?message=Comentário+removido!"
     return RedirectResponse(url=redirect_url, status_code=302)
+
+
+@app.get("/movie/{tmdb_movie_id}", response_class=HTMLResponse)
+async def movie_detail_page(request: Request, tmdb_movie_id: int, message: str = None):
+    """Página de detalhes do filme com seção de comentários e RBAC."""
+    user = await _get_user_or_none(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # Buscar detalhes do filme na TMDB
+    try:
+        movie = await get_movie_details(tmdb_movie_id)
+    except Exception as e:
+        movie = None
+
+    if not movie:
+        return templates.TemplateResponse("movie.html", {
+            "request": request,
+            "user": user,
+            "active_page": "catalog",
+            "movie": None,
+            "comments": [],
+            "is_favorited": False,
+            "message": None,
+            "error": "Filme não encontrado.",
+        })
+
+    # Verificar se o filme está favoritado pelo usuário
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id FROM favoritos WHERE usuario_id = %s AND tmdb_movie_id = %s",
+            (user["id"], tmdb_movie_id),
+        )
+        is_favorited = cursor.fetchone() is not None
+
+        # Buscar TODOS os comentários do filme (qualquer usuário), com nome do autor
+        cursor.execute(
+            """SELECT c.id, c.usuario_id, c.texto, c.criado_em, u.nome AS autor_nome
+               FROM comentarios c
+               JOIN usuarios u ON c.usuario_id = u.id
+               WHERE c.tmdb_movie_id = %s
+               ORDER BY c.criado_em DESC""",
+            (tmdb_movie_id,),
+        )
+        comments = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return templates.TemplateResponse("movie.html", {
+        "request": request,
+        "user": user,
+        "active_page": "catalog",
+        "movie": movie,
+        "comments": comments,
+        "is_favorited": is_favorited,
+        "message": message,
+        "error": None,
+    })
 
 
 @app.get("/favorites", response_class=HTMLResponse)

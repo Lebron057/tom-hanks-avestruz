@@ -68,3 +68,44 @@ async def get_tom_hanks_movies() -> list[dict]:
     # Ordenar por data de lançamento (mais recente primeiro)
     movies.sort(key=lambda m: m.get("release_date", "") or "", reverse=True)
     return movies
+
+
+TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w1280"
+
+
+async def get_movie_details(movie_id: int) -> dict | None:
+    """
+    Busca detalhes completos de um filme específico na API TMDB.
+    Retorna dict com id, title, overview, poster_url, backdrop_url,
+    release_date, runtime, genres, vote_average, tagline.
+    """
+    api_key = _get_api_key()
+    headers = {"accept": "application/json"}
+    params = {"api_key": api_key, "language": "pt-BR"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{TMDB_BASE_URL}/movie/{movie_id}",
+            params=params,
+            headers=headers,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+
+    poster_path = data.get("poster_path")
+    backdrop_path = data.get("backdrop_path")
+
+    return {
+        "id": data.get("id"),
+        "title": data.get("title", "Sem título"),
+        "overview": data.get("overview", "Sinopse não disponível."),
+        "poster_url": f"{TMDB_IMAGE_BASE}{poster_path}" if poster_path else None,
+        "backdrop_url": f"{TMDB_BACKDROP_BASE}{backdrop_path}" if backdrop_path else None,
+        "release_date": data.get("release_date", ""),
+        "runtime": data.get("runtime"),
+        "genres": [g["name"] for g in data.get("genres", [])],
+        "vote_average": data.get("vote_average"),
+        "tagline": data.get("tagline", ""),
+    }

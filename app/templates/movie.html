@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ movie.title if movie else 'Filme não encontrado' }} — Catálogo Tom Hanks{% endblock %}
+
+{% block content %}
+{% if error and not movie %}
+<div class="container">
+    <div class="empty-state">
+        <div class="icon">🎬</div>
+        <h3>{{ error }}</h3>
+        <p>O filme solicitado não foi encontrado na base da TMDB.</p>
+        <a href="/catalog" class="btn btn-primary">🎬 Voltar ao Catálogo</a>
+    </div>
+</div>
+{% else %}
+
+{# ── Hero Backdrop ── #}
+<div class="movie-hero" {% if movie.backdrop_url %}style="background-image: url('{{ movie.backdrop_url }}');"{% endif %}>
+    <div class="movie-hero-overlay"></div>
+    <div class="movie-hero-content">
+        <a href="/catalog" class="btn btn-ghost btn-sm movie-back-btn">← Voltar ao Catálogo</a>
+        <div class="movie-hero-inner">
+            <div class="movie-hero-poster">
+                {% if movie.poster_url %}
+                <img src="{{ movie.poster_url }}" alt="Pôster de {{ movie.title }}">
+                {% else %}
+                <div class="no-poster-large">🎬</div>
+                {% endif %}
+            </div>
+            <div class="movie-hero-info">
+                <h1>{{ movie.title }}</h1>
+                {% if movie.tagline %}
+                <p class="movie-tagline">{{ movie.tagline }}</p>
+                {% endif %}
+
+                <div class="movie-meta">
+                    {% if movie.release_date %}
+                    <span class="meta-item">📅 {{ movie.release_date[:4] }}</span>
+                    {% endif %}
+                    {% if movie.runtime %}
+                    <span class="meta-item">⏱️ {{ movie.runtime }} min</span>
+                    {% endif %}
+                    {% if movie.vote_average %}
+                    <span class="meta-item meta-rating">⭐ {{ "%.1f"|format(movie.vote_average) }}</span>
+                    {% endif %}
+                </div>
+
+                {% if movie.genres %}
+                <div class="movie-genres">
+                    {% for genre in movie.genres %}
+                    <span class="genre-tag">{{ genre }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <p class="movie-overview-full">{{ movie.overview }}</p>
+
+                <div class="movie-hero-actions">
+                    {% if is_favorited %}
+                    <form method="POST" action="/favorite/{{ movie.id }}/remove" style="display:inline;">
+                        <button type="submit" class="btn btn-favorite is-favorited" title="Remover dos favoritos">
+                            ★ Favoritado
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="/favorite/{{ movie.id }}" style="display:inline;">
+                        <input type="hidden" name="titulo" value="{{ movie.title }}">
+                        <input type="hidden" name="poster_path" value="{{ movie.poster_url or '' }}">
+                        <button type="submit" class="btn btn-favorite" title="Adicionar aos favoritos">
+                            ☆ Favoritar
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Comentários ── #}
+<div class="container">
+    {% if message %}
+    <div class="alert alert-success" style="max-width: 700px; margin: 0 auto 2rem;">✅ {{ message }}</div>
+    {% endif %}
+
+    <div class="movie-comments-section">
+        <div class="comments-header">
+            <h2>💬 Comentários</h2>
+            <span class="comments-count">{{ comments|length }} comentário{{ 's' if comments|length != 1 else '' }}</span>
+        </div>
+
+        {# ── Formulário de novo comentário ── #}
+        <div class="comment-form-card">
+            <div class="comment-form-avatar">{{ user.nome[0]|upper }}</div>
+            <form method="POST" action="/comment/{{ movie.id }}" class="comment-form-inner">
+                <input type="hidden" name="titulo" value="{{ movie.title }}">
+                <input type="text" name="texto" placeholder="Escreva um comentário sobre este filme..." required>
+                <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+            </form>
+        </div>
+
+        {# ── Lista de comentários ── #}
+        {% if comments %}
+        <div class="comments-list">
+            {% for comment in comments %}
+            {% set is_own_comment = (comment.usuario_id == user.id) %}
+            <div class="comment-card {% if is_own_comment %}comment-own{% endif %}">
+                <div class="comment-avatar" {% if is_own_comment %}style="background: var(--accent-gradient);"{% else %}style="background: linear-gradient(135deg, #f59e0b, #ef4444);"{% endif %}>
+                    {{ comment.autor_nome[0]|upper if comment.autor_nome else '?' }}
+                </div>
+                <div class="comment-body">
+                    <div class="comment-header">
+                        <div class="comment-author-info">
+                            <strong>{{ comment.autor_nome if comment.autor_nome else 'Anônimo' }}</strong>
+                            {% if is_own_comment %}
+                            <span class="badge badge-you">Você</span>
+                            {% endif %}
+                        </div>
+                        <span class="comment-date">{{ comment.criado_em.strftime('%d/%m/%Y às %H:%M') if comment.criado_em else '' }}</span>
+                    </div>
+                    <p class="comment-text">{{ comment.texto }}</p>
+                </div>
+                {# RBAC: Botão de excluir — só aparece para o autor do comentário OU admin #}
+                {% if is_own_comment or user.role == 'admin' %}
+                <form method="POST" action="/comment/{{ comment.id }}/remove" class="comment-delete-form">
+                    <button type="submit" class="btn-delete-comment" title="Excluir comentário">
+                        🗑️
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="comments-empty">
+            <p>Nenhum comentário ainda. Seja o primeiro a comentar!</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

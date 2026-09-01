@@ -787,6 +787,375 @@ body::before {
     }
 }
 
+/* ── Card Link (clickable cards) ──────────────────────── */
+.card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.card-title-link {
+    text-decoration: none;
+    color: inherit;
+}
+
+.card-title-link:hover h3 {
+    color: var(--accent-primary);
+    transition: color var(--transition-fast);
+}
+
+/* ── Movie Detail Hero ───────────────────────────────── */
+.movie-hero {
+    position: relative;
+    min-height: 520px;
+    background-size: cover;
+    background-position: center top;
+    background-color: var(--bg-secondary);
+    display: flex;
+    align-items: flex-end;
+}
+
+.movie-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(10, 10, 26, 0.4) 0%,
+        rgba(10, 10, 26, 0.7) 40%,
+        rgba(10, 10, 26, 0.95) 80%,
+        var(--bg-primary) 100%
+    );
+    z-index: 1;
+}
+
+.movie-hero-content {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.movie-back-btn {
+    margin-bottom: 1.5rem;
+    display: inline-flex;
+}
+
+.movie-hero-inner {
+    display: flex;
+    gap: 2.5rem;
+    align-items: flex-end;
+}
+
+.movie-hero-poster {
+    width: 260px;
+    min-width: 260px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg), 0 0 60px rgba(124, 92, 252, 0.15);
+    border: 1px solid var(--border-glass);
+    flex-shrink: 0;
+}
+
+.movie-hero-poster img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.no-poster-large {
+    width: 260px;
+    height: 390px;
+    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    color: var(--text-muted);
+    border-radius: var(--radius-lg);
+}
+
+.movie-hero-info {
+    flex: 1;
+    padding-bottom: 0.5rem;
+}
+
+.movie-hero-info h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.movie-tagline {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 1.25rem;
+    font-weight: 300;
+}
+
+.movie-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-xl);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.meta-rating {
+    background: rgba(252, 165, 92, 0.1);
+    border-color: rgba(252, 165, 92, 0.2);
+    color: var(--warning);
+}
+
+.movie-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.genre-tag {
+    padding: 0.35rem 0.85rem;
+    background: rgba(124, 92, 252, 0.1);
+    border: 1px solid rgba(124, 92, 252, 0.2);
+    border-radius: var(--radius-xl);
+    font-size: 0.8rem;
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.movie-overview-full {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 1.5rem;
+    max-width: 700px;
+}
+
+.movie-hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* ── Movie Comments Section ──────────────────────────── */
+.movie-comments-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding-top: 1rem;
+}
+
+.comments-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.comments-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.comments-count {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    padding: 0.4rem 0.85rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-xl);
+}
+
+/* ── Comment Form Card ───────────────────────────────── */
+.comment-form-card {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1.25rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    margin-bottom: 2rem;
+}
+
+.comment-form-avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: white;
+}
+
+.comment-form-inner {
+    flex: 1;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.comment-form-inner input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.comment-form-inner input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.15);
+}
+
+/* ── Comment Cards List ──────────────────────────────── */
+.comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.comment-card {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-base);
+    animation: fadeSlideUp 0.3s ease both;
+    align-items: flex-start;
+}
+
+.comment-card:hover {
+    border-color: var(--border-glass-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.comment-card.comment-own {
+    border-left: 3px solid var(--accent-primary);
+}
+
+.comment-avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+}
+
+.comment-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.comment-author-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.comment-author-info strong {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.badge-you {
+    background: rgba(124, 92, 252, 0.2);
+    color: var(--accent-primary);
+    border: 1px solid rgba(124, 92, 252, 0.3);
+}
+
+.comment-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.comment-delete-form {
+    flex-shrink: 0;
+}
+
+.btn-delete-comment {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    transition: all var(--transition-fast);
+    color: var(--text-muted);
+}
+
+.btn-delete-comment:hover {
+    background: rgba(252, 92, 124, 0.1);
+    border-color: rgba(252, 92, 124, 0.2);
+    color: var(--danger);
+}
+
+.comments-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
 /* ── Scrollbar ────────────────────────────────────────── */
 ::-webkit-scrollbar {
     width: 8px;
@@ -803,4 +1172,67 @@ body::before {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* ── Movie Detail Responsive ─────────────────────────── */
+@media (max-width: 768px) {
+    .movie-hero {
+        min-height: auto;
+    }
+
+    .movie-hero-inner {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 1.5rem;
+    }
+
+    .movie-hero-poster {
+        width: 180px;
+        min-width: 180px;
+    }
+
+    .movie-hero-info h1 {
+        font-size: 1.75rem;
+    }
+
+    .movie-meta {
+        justify-content: center;
+    }
+
+    .movie-genres {
+        justify-content: center;
+    }
+
+    .movie-overview-full {
+        text-align: left;
+    }
+
+    .movie-hero-actions {
+        justify-content: center;
+    }
+
+    .comment-form-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .comment-form-avatar {
+        display: none;
+    }
+
+    .comment-form-inner {
+        flex-direction: column;
+    }
+
+    .comment-card {
+        flex-direction: column;
+    }
+
+    .comment-avatar {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        font-size: 0.75rem;
+    }
 }
