@@ -17,6 +17,9 @@
         <div class="navbar-links">
             <a href="/catalog" class="{{ 'active' if active_page == 'catalog' else '' }}">🎞️ Catálogo</a>
             <a href="/favorites" class="{{ 'active' if active_page == 'favorites' else '' }}">⭐ Favoritos</a>
+            {% if user.role == 'admin' %}
+            <a href="/admin/logs" class="{{ 'active' if active_page == 'admin_logs' else '' }}">🛡️ Logs</a>
+            {% endif %}
         </div>
         <div style="display: flex; align-items: center; gap: 1rem;">
             <div class="navbar-user">

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Logs de Auditoria — Admin{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 95%; width: 100%; margin: 0 auto; padding: 2rem 1rem;">
+    <!-- Header Section -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                <span style="-webkit-text-fill-color: initial;">🛡️</span> Logs de Auditoria
+            </h1>
+            <p style="color: var(--text-secondary); font-size: 1.1rem;">
+                Registro centralizado de eventos do sistema — <span style="color: var(--text-primary); font-weight: 500;">quem fez o quê, e quando</span>.
+            </p>
+        </div>
+
+        <!-- Filter Form -->
+        <form method="get" action="/admin/logs" style="display: flex; align-items: center; gap: 1rem; background: var(--bg-card); padding: 0.75rem 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--border-glass); box-shadow: var(--shadow-sm); backdrop-filter: blur(10px);">
+            <label for="limit" style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;">Exibir últimos:</label>
+            <select name="limit" id="limit" style="
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                border: 1px solid var(--border-glass-hover);
+                border-radius: var(--radius-md);
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+                font-family: inherit;
+                font-weight: 600;
+                cursor: pointer;
+                outline: none;
+                transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+            " onfocus="this.style.borderColor='var(--accent-primary)'; this.style.boxShadow='0 0 0 2px rgba(124, 92, 252, 0.2)';" onblur="this.style.borderColor='var(--border-glass-hover)'; this.style.boxShadow='none';">
+                <option value="20" {{ 'selected' if limit == 20 else '' }}>20 eventos</option>
+                <option value="50" {{ 'selected' if limit == 50 else '' }}>50 eventos</option>
+                <option value="100" {{ 'selected' if limit == 100 else '' }}>100 eventos</option>
+                <option value="200" {{ 'selected' if limit == 200 else '' }}>200 eventos</option>
+            </select>
+            <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1.25rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 0.5rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                Filtrar
+            </button>
+        </form>
+    </div>
+
+    <!-- Alerts -->
+    {% if error %}
+    <div class="alert" style="background: rgba(252, 92, 124, 0.1); border: 1px solid rgba(252, 92, 124, 0.3); border-radius: var(--radius-lg); padding: 1rem 1.5rem; margin-bottom: 2rem; color: var(--danger); display: flex; align-items: center; gap: 0.75rem; font-weight: 500; box-shadow: 0 4px 20px rgba(252, 92, 124, 0.1);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if message %}
+    <div class="alert" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.3); border-radius: var(--radius-lg); padding: 1rem 1.5rem; margin-bottom: 2rem; color: var(--success); display: flex; align-items: center; gap: 0.75rem; font-weight: 500; box-shadow: 0 4px 20px rgba(0, 212, 170, 0.1);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        {{ message }}
+    </div>
+    {% endif %}
+
+    <!-- Data Table -->
+    {% if logs %}
+    <div style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-xl); overflow: hidden; box-shadow: var(--shadow-md); backdrop-filter: blur(20px);">
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                    <tr style="background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border-glass-hover);">
+                        <th style="padding: 1.25rem 1.5rem; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.5rem;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            Timestamp
+                        </th>
+                        <th style="padding: 1.25rem 1.5rem; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                Usuário
+                            </div>
+                        </th>
+                        <th style="padding: 1.25rem 1.5rem; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                                Ação
+                            </div>
+                        </th>
+                        <th style="padding: 1.25rem 1.5rem; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                Detalhe
+                            </div>
+                        </th>
+                        <th style="padding: 1.25rem 1.5rem; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                IP
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr style="border-bottom: 1px solid var(--border-glass); transition: all var(--transition-fast);"
+                        onmouseenter="this.style.background='var(--bg-glass-hover)'; this.style.transform='translateY(-1px)';"
+                        onmouseleave="this.style.background='transparent'; this.style.transform='none';">
+                        <td style="padding: 1rem 1.5rem; white-space: nowrap; color: var(--text-primary); font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 0.85rem;">
+                            {% if log.timestamp %}
+                            {% set dt = log.timestamp.split('T') %}
+                            <span style="color: var(--text-secondary);">{{ dt[0] }}</span> <span style="font-weight: 600;">{{ dt[1][:8] }}</span>
+                            {% else %}
+                            <span style="color: var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: 1rem 1.5rem; white-space: nowrap;">
+                            <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 500;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                {{ log.usuario_id }}
+                            </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; white-space: nowrap;">
+                            {% if log.acao == 'acesso_negado_403' %}
+                            <span style="background: rgba(252, 92, 124, 0.15); color: var(--danger); border: 1px solid rgba(252, 92, 124, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 10px rgba(252, 92, 124, 0.1);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                Acesso Negado (403)
+                            </span>
+                            {% elif log.acao == 'login' %}
+                            <span style="background: rgba(0, 212, 170, 0.15); color: var(--success); border: 1px solid rgba(0, 212, 170, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 10px rgba(0, 212, 170, 0.1);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                                Login
+                            </span>
+                            {% elif log.acao == 'logout' %}
+                            <span style="background: rgba(149, 149, 184, 0.15); color: var(--text-secondary); border: 1px solid rgba(149, 149, 184, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                                Logout
+                            </span>
+                            {% elif 'admin' in (log.acao or '') %}
+                            <span style="background: rgba(252, 169, 92, 0.15); color: var(--warning); border: 1px solid rgba(252, 169, 92, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 10px rgba(252, 169, 92, 0.1);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                                Moderação
+                            </span>
+                            {% elif log.acao == 'favoritar' %}
+                            <span style="background: rgba(252, 169, 92, 0.15); color: var(--warning); border: 1px solid rgba(252, 169, 92, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 10px rgba(252, 169, 92, 0.1);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                Favoritar
+                            </span>
+                            {% elif log.acao == 'comentar' %}
+                            <span style="background: rgba(124, 92, 252, 0.15); color: var(--accent-primary); border: 1px solid rgba(124, 92, 252, 0.3); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 10px rgba(124, 92, 252, 0.1);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                Comentar
+                            </span>
+                            {% else %}
+                            <span style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-glass); border-radius: 99px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.4rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                                {{ log.acao }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: 1rem 1.5rem; color: var(--text-primary); font-size: 0.9rem; max-width: 400px; line-height: 1.4;">
+                            {% if log.detalhe %}
+                            <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;" title="{{ log.detalhe }}">
+                                {{ log.detalhe }}
+                            </div>
+                            {% else %}
+                            <span style="color: var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: 1rem 1.5rem; color: var(--text-secondary); font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 0.85rem; white-space: nowrap;">
+                            {{ log.ip_origem or '—' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Table Footer -->
+        <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-glass); background: rgba(0, 0, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); font-size: 0.85rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                Dados em tempo real via Redis Stream
+            </div>
+            <span style="background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 99px; padding: 0.25rem 0.75rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">
+                Exibindo {{ logs|length }} evento(s)
+            </span>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Empty State -->
+    <div style="background: var(--bg-card); border: 1px dashed var(--border-glass-hover); border-radius: var(--radius-xl); padding: 5rem 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); backdrop-filter: blur(10px);">
+        <div style="width: 80px; height: 80px; background: rgba(255, 255, 255, 0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; border: 1px solid var(--border-glass);">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+        </div>
+        <h3 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">Nenhum evento registrado</h3>
+        <p style="color: var(--text-secondary); max-width: 400px; font-size: 1rem; line-height: 1.6;">
+            Ainda não há atividades no sistema para exibir. Conforme os usuários interagirem com a plataforma, os eventos aparecerão aqui automaticamente.
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

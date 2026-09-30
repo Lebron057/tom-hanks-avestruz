@@ -5,11 +5,15 @@ Responsável exclusivamente por:
 - Login e emissão de tokens JWT
 - Validação de sessão / tokens
 - Fluxo completo de recuperação de senha com tokens de 30 minutos e envio SMTP (Mailtrap)
+- Disparo de eventos de auditoria para o log-service (Atividade 5)
 """
 
+import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+import httpx
 
 from fastapi import FastAPI, HTTPException, status, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +38,34 @@ from auth_service.security import (
     generate_reset_token,
 )
 from auth_service.mailer import send_password_reset_email
+
+
+# ── Configuração do Log Service ─────────────────────────
+LOG_SERVICE_URL = os.getenv("LOG_SERVICE_URL", "http://log-service:8002").rstrip("/")
+
+
+async def _emit_log(
+    usuario_id: int,
+    acao: str,
+    detalhe: str = "",
+    ip_origem: str = "",
+):
+    """
+    Dispara um evento de auditoria para o log-service via HTTP.
+    Falhas são tratadas silenciosamente (best-effort).
+    """
+    try:
+        payload = {
+            "usuario_id": usuario_id,
+            "acao": acao,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "detalhe": detalhe,
+            "ip_origem": ip_origem,
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"{LOG_SERVICE_URL}/logs", json=payload)
+    except Exception as e:
+        print(f"[AuthService] Falha ao enviar log (best-effort): {e}")
 
 
 @asynccontextmanager
@@ -156,6 +188,13 @@ async def login(data: LoginRequest):
             nome=usuario["nome"],
             email=usuario["email"],
             role=user_role,
+        )
+
+        # ── Evento de auditoria: login bem-sucedido ──
+        await _emit_log(
+            usuario_id=usuario["id"],
+            acao="login",
+            detalhe=f"email={usuario['email']}",
         )
 
         return TokenResponse(

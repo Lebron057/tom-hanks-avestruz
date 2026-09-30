@@ -2,12 +2,10 @@ version: "3.8"
 
 services:
   catalog-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lebron057/catalog-service-iago:latest   # ← imagem do Docker Hub
     container_name: catalog-service-iago
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "8210:8000"    # ← porta FIXA 8210 (reservada para o aluno Iago)
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY}
       - DB_HOST=${DB_HOST}
@@ -16,19 +14,15 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - SECRET_KEY=${SECRET_KEY}
-      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8001}
-      - LOG_SERVICE_URL=${LOG_SERVICE_URL:-http://log-service:8002}
+      - AUTH_SERVICE_URL=http://auth-service:8001
     depends_on:
       - auth-service
-      - log-service
     networks:
       - internal-net
     restart: unless-stopped
 
   auth-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lebron057/auth-service-iago:latest       # ← imagem do Docker Hub
     container_name: auth-service-iago
     command: ["uvicorn", "auth_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
     expose:
@@ -45,43 +39,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM=${SMTP_FROM:-noreply@catalogofilmes.com}
-      - LOG_SERVICE_URL=${LOG_SERVICE_URL:-http://log-service:8002}
-    depends_on:
-      - log-service
     networks:
       - internal-net
     restart: unless-stopped
-
-  log-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: log-service-iago
-    command: ["uvicorn", "log_service.main:app", "--host", "0.0.0.0", "--port", "8002"]
-    expose:
-      - "8002"
-    environment:
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - SECRET_KEY=${SECRET_KEY}
-    depends_on:
-      - redis
-    networks:
-      - internal-net
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: redis-iago
-    networks:
-      - internal-net
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
 
 networks:
   internal-net:
     driver: bridge
-
-volumes:
-  redis-data:

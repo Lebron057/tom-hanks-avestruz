@@ -6,10 +6,15 @@ Responsabilidades:
 - Integração com a API do TMDB para catálogo ao vivo de filmes.
 - Persistência e segregação de favoritos e comentários por usuário no MariaDB.
 - Delegação de autenticação, papéis e recuperação de senha ao auth-service privado.
+- Disparo de eventos de auditoria para o log-service (Atividade 5).
+- Rota de consulta de logs para administradores (/admin/logs).
 """
 
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
+import httpx
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +30,10 @@ from app.auth import (
     reset_password,
 )
 from app.tmdb import get_tom_hanks_movies, get_movie_details
+
+
+# ── Configuração do Log Service ─────────────────────────
+LOG_SERVICE_URL = os.getenv("LOG_SERVICE_URL", "http://log-service:8002").rstrip("/")
 
 
 # ── Lifespan ────────────────────────────────────────────
@@ -52,6 +61,50 @@ async def _get_user_or_none(request: Request) -> dict | None:
         return await get_current_user(request)
     except HTTPException:
         return None
+
+
+async def _emit_log(
+    usuario_id: int,
+    acao: str,
+    detalhe: str = "",
+    ip_origem: str = "",
+):
+    """
+    Dispara um evento de auditoria para o log-service via HTTP.
+    Falhas são tratadas silenciosamente (try/except) para não
+    derrubar a ação principal do usuário — log é 'best effort'.
+    """
+    try:
+        payload = {
+            "usuario_id": usuario_id,
+            "acao": acao,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "detalhe": detalhe,
+            "ip_origem": ip_origem,
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"{LOG_SERVICE_URL}/logs", json=payload)
+    except Exception as e:
+        print(f"[CatalogService] Falha ao enviar log (best-effort): {e}")
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extrai o IP de origem da requisição."""
+    if request.client:
+        return request.client.host
+    return ""
+
+
+def _require_admin(user: dict):
+    """
+    Dependency reutilizável de RBAC: exige role == 'admin'.
+    Levanta HTTPException(403) caso contrário.
+    """
+    if user.get("role", "user") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: somente administradores.",
+        )
 
 
 # ══════════════════════════════════════════════════════════
@@ -97,6 +150,15 @@ async def login_submit(request: Request, email: str = Form(...), senha: str = Fo
 
     token_data = result["data"]
     token = token_data["access_token"]
+
+    # ── Evento de auditoria: login bem-sucedido ──
+    user_data = token_data.get("user", {})
+    await _emit_log(
+        usuario_id=user_data.get("id", 0),
+        acao="login",
+        detalhe=f"email={email}",
+        ip_origem=_get_client_ip(request),
+    )
 
     response = RedirectResponse(url="/catalog", status_code=302)
     response.set_cookie(
@@ -258,7 +320,16 @@ async def reset_password_submit(
 
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    # ── Evento de auditoria: logout ──
+    user = await _get_user_or_none(request)
+    if user:
+        await _emit_log(
+            usuario_id=user["id"],
+            acao="logout",
+            detalhe=f"email={user.get('email', '')}",
+            ip_origem=_get_client_ip(request),
+        )
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("access_token")
     return response
@@ -329,6 +400,14 @@ async def add_favorite(
         cursor.close()
         conn.close()
 
+    # ── Evento de auditoria: favoritar filme ──
+    await _emit_log(
+        usuario_id=user["id"],
+        acao="favoritar",
+        detalhe=f"tmdb_movie_id={tmdb_movie_id}, titulo={titulo}",
+        ip_origem=_get_client_ip(request),
+    )
+
     return RedirectResponse(url="/catalog?message=Filme+favoritado!", status_code=302)
 
 
@@ -380,6 +459,14 @@ async def add_comment(
         cursor.close()
         conn.close()
 
+    # ── Evento de auditoria: comentar ──
+    await _emit_log(
+        usuario_id=user["id"],
+        acao="comentar",
+        detalhe=f"tmdb_movie_id={tmdb_movie_id}, titulo={titulo}, texto={texto[:100]}",
+        ip_origem=_get_client_ip(request),
+    )
+
     referer = request.headers.get("referer", "/catalog")
     if f"/movie/{tmdb_movie_id}" in referer or "movie" in referer:
         redirect_url = f"/movie/{tmdb_movie_id}?message=Comentário+adicionado!"
@@ -417,13 +504,36 @@ async def remove_comment(request: Request, comment_id: int):
         is_admin = user.get("role", "user") == "admin"
 
         if not is_owner and not is_admin:
+            # ── Evento de auditoria: acesso negado (403) ──
+            await _emit_log(
+                usuario_id=user["id"],
+                acao="acesso_negado_403",
+                detalhe=f"tentativa de remover comentario_id={comment_id} de outro usuario",
+                ip_origem=_get_client_ip(request),
+            )
             raise HTTPException(
                 status_code=403,
                 detail="Acesso negado: você não tem permissão para apagar este comentário.",
             )
 
+        # Determinar tipo de ação para o log
+        if is_admin and not is_owner:
+            acao_log = "remover_comentario_admin"
+            detalhe_log = f"comentario_id={comment_id}, dono_id={comment['usuario_id']} (moderação)"
+        else:
+            acao_log = "remover_comentario_proprio"
+            detalhe_log = f"comentario_id={comment_id}"
+
         cursor.execute("DELETE FROM comentarios WHERE id = %s", (comment_id,))
         conn.commit()
+
+        # ── Evento de auditoria: remoção de comentário ──
+        await _emit_log(
+            usuario_id=user["id"],
+            acao=acao_log,
+            detalhe=detalhe_log,
+            ip_origem=_get_client_ip(request),
+        )
     finally:
         cursor.close()
         conn.close()
@@ -558,3 +668,61 @@ async def favorites_page(request: Request, message: str = None):
         "message": message,
     })
 
+
+# ══════════════════════════════════════════════════════════
+#  ROTA DE ADMINISTRAÇÃO — CONSULTA DE LOGS (Atividade 5)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/admin/logs", response_class=HTMLResponse)
+async def admin_logs_page(request: Request, limit: int = 50, message: str = None):
+    """
+    Página de consulta de logs de auditoria — apenas admin.
+    O catalog-service valida RBAC localmente e repassa a chamada
+    para o log-service interno via httpx.
+    """
+    user = await _get_user_or_none(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # ── Enforcement de RBAC ──
+    if user.get("role", "user") != "admin":
+        # Evento de auditoria: tentativa de acesso negado
+        await _emit_log(
+            usuario_id=user["id"],
+            acao="acesso_negado_403",
+            detalhe="tentativa de acessar /admin/logs sem permissão",
+            ip_origem=_get_client_ip(request),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: somente administradores.",
+        )
+
+    # ── Repassar chamada ao log-service interno ──
+    logs = []
+    error = None
+    try:
+        token = request.cookies.get("access_token", "")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{LOG_SERVICE_URL}/logs",
+                params={"limit": limit},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                logs = data.get("logs", [])
+            else:
+                error = f"Erro ao consultar log-service: HTTP {resp.status_code}"
+    except Exception as e:
+        error = f"Log-service indisponível: {e}"
+
+    return templates.TemplateResponse("admin_logs.html", {
+        "request": request,
+        "user": user,
+        "active_page": "admin_logs",
+        "logs": logs,
+        "limit": limit,
+        "message": message,
+        "error": error,
+    })
