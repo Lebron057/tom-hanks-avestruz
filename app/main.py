@@ -8,6 +8,7 @@ Responsabilidades:
 - Delegação de autenticação, papéis e recuperação de senha ao auth-service privado.
 - Disparo de eventos de auditoria para o log-service (Atividade 5).
 - Rota de consulta de logs para administradores (/admin/logs).
+- Perfil de usuário com upload de foto via MinIO (Atividade 6).
 """
 
 import os
@@ -15,8 +16,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -30,6 +31,16 @@ from app.auth import (
     reset_password,
 )
 from app.tmdb import get_tom_hanks_movies, get_movie_details
+from app.minio_client import ensure_bucket, upload_avatar, delete_avatar, stream_avatar, MINIO_BUCKET
+from minio.error import S3Error
+
+# ── Configuração do MinIO ────────────────────────────────
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
+MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+# Tamanho máximo de upload: 3 MB
+MAX_UPLOAD_BYTES = 3 * 1024 * 1024
+# MIME types permitidos para foto de perfil
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 # ── Configuração do Log Service ─────────────────────────
@@ -39,11 +50,15 @@ LOG_SERVICE_URL = os.getenv("LOG_SERVICE_URL", "http://log-service:8002").rstrip
 # ── Lifespan ────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: garante que as tabelas de favoritos e comentários existam
+    # Startup: garante que as tabelas existam e o bucket MinIO esteja pronto
     try:
         init_db()
     except Exception as e:
         print(f"[CatalogService] Aviso ao inicializar banco: {e}")
+    try:
+        ensure_bucket()
+    except Exception as e:
+        print(f"[CatalogService] Aviso ao inicializar MinIO: {e}")
     yield
 
 
@@ -726,3 +741,195 @@ async def admin_logs_page(request: Request, limit: int = 50, message: str = None
         "message": message,
         "error": error,
     })
+
+
+# ══════════════════════════════════════════════════════════
+#  ROTAS DE PERFIL DE USUÁRIO — MinIO (Atividade 6)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/profile/{profile_user_id}", response_class=HTMLResponse)
+async def profile_page(request: Request, profile_user_id: int, message: str = None, error: str = None):
+    """
+    Página de perfil pública: exibe foto (do MinIO), bio e filmes favoritados.
+    O botão de edição só é renderizado quando o usuário logado é o dono do perfil.
+    """
+    user = await _get_user_or_none(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # Buscar dados do usuário de perfil no banco
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, nome, email, role, bio, avatar_key FROM usuarios WHERE id = %s",
+            (profile_user_id,),
+        )
+        profile_user = cursor.fetchone()
+        if not profile_user:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
+        # Buscar filmes favoritados pelo dono do perfil
+        cursor.execute(
+            """SELECT tmdb_movie_id, titulo, poster_path, criado_em
+               FROM favoritos WHERE usuario_id = %s ORDER BY criado_em DESC""",
+            (profile_user_id,),
+        )
+        favorites = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Montar URL do avatar via proxy interno /storage/avatars/<filename>
+    avatar_url = None
+    if profile_user.get("avatar_key"):
+        # Extrai apenas o nome do arquivo da chave (ex: "avatars/42-xxx.jpg" → "42-xxx.jpg")
+        filename = profile_user["avatar_key"].split("/", 1)[-1]
+        avatar_url = f"/storage/avatars/{filename}"
+
+    is_own_profile = (user["id"] == profile_user_id)
+
+    return templates.TemplateResponse("profile.html", {
+        "request": request,
+        "user": user,
+        "active_page": "profile",
+        "profile_user": profile_user,
+        "avatar_url": avatar_url,
+        "favorites": favorites,
+        "is_own_profile": is_own_profile,
+        "message": message,
+        "error": error,
+    })
+
+
+@app.post("/profile/{profile_user_id}/upload")
+async def profile_upload(
+    request: Request,
+    profile_user_id: int,
+    bio: str = Form(""),
+    foto: UploadFile = File(None),
+):
+    """
+    Atualiza bio e/ou foto de perfil do usuário.
+    Segurança:
+      - O usuário SÓ pode editar o próprio perfil.
+      - O user_id é extraído do JWT/sessão. O :id da URL é apenas para roteamento.
+      - Validação de MIME type e tamanho no backend (nunca confiar apenas no frontend).
+    """
+    user = await _get_user_or_none(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # ── Isolamento rígido: NUNCA confiar no ID da URL para autorizar edição ──
+    if user["id"] != profile_user_id:
+        await _emit_log(
+            usuario_id=user["id"],
+            acao="audit.security.access_denied",
+            detalhe=f"tentativa de editar perfil do usuario_id={profile_user_id} (403)",
+            ip_origem=_get_client_ip(request),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: você só pode editar o seu próprio perfil.",
+        )
+
+    new_avatar_key = None
+
+    # ── Processar upload de imagem (se enviado) ──
+    if foto and foto.filename:
+        # Validação de MIME type no backend
+        if foto.content_type not in ALLOWED_MIME_TYPES:
+            return RedirectResponse(
+                url=f"/profile/{profile_user_id}?error=Tipo+de+arquivo+inválido.+Envie+uma+imagem+JPEG,+PNG,+WEBP+ou+GIF.",
+                status_code=302,
+            )
+
+        file_bytes = await foto.read()
+
+        # Validação de tamanho no backend (≤ 3 MB)
+        if len(file_bytes) > MAX_UPLOAD_BYTES:
+            return RedirectResponse(
+                url=f"/profile/{profile_user_id}?error=Arquivo+muito+grande.+Limite+máximo:+3+MB.",
+                status_code=302,
+            )
+
+        # Buscar avatar antigo para remover (evitar objetos órfãos no MinIO)
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT avatar_key FROM usuarios WHERE id = %s", (user["id"],))
+            row = cursor.fetchone()
+            old_key = row["avatar_key"] if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Upload da nova imagem para o MinIO
+        try:
+            new_avatar_key = upload_avatar(
+                user_id=user["id"],
+                file_bytes=file_bytes,
+                filename=foto.filename,
+                content_type=foto.content_type,
+            )
+        except S3Error as e:
+            return RedirectResponse(
+                url=f"/profile/{profile_user_id}?error=Erro+ao+enviar+imagem+para+o+storage.",
+                status_code=302,
+            )
+
+        # Remover avatar anterior do MinIO (best-effort)
+        if old_key:
+            delete_avatar(old_key)
+
+    # ── Persistir bio e/ou nova chave do avatar no MariaDB ──
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        if new_avatar_key:
+            cursor.execute(
+                "UPDATE usuarios SET bio = %s, avatar_key = %s WHERE id = %s",
+                (bio.strip() or None, new_avatar_key, user["id"]),
+            )
+        else:
+            # Só a bio foi enviada — não apaga o avatar existente
+            cursor.execute(
+                "UPDATE usuarios SET bio = %s WHERE id = %s",
+                (bio.strip() or None, user["id"]),
+            )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # ── Evento de auditoria: atualização de perfil ──
+    await _emit_log(
+        usuario_id=user["id"],
+        acao="perfil.atualizado",
+        detalhe=f"bio_atualizada={'sim' if bio.strip() else 'nao'}, foto_atualizada={'sim' if new_avatar_key else 'nao'}",
+        ip_origem=_get_client_ip(request),
+    )
+
+    return RedirectResponse(
+        url=f"/profile/{profile_user_id}?message=Perfil+atualizado+com+sucesso!",
+        status_code=302,
+    )
+
+
+@app.get("/storage/avatars/{filename}")
+async def serve_avatar(filename: str):
+    """
+    Proxy interno para servir imagens armazenadas no MinIO.
+    O MinIO não expõe porta pública no host; o catalog-service faz o proxy.
+    Isso segue o mesmo padrão do proxy /grafana descrito no auxiliar.
+    """
+    key = f"avatars/{filename}"
+    try:
+        response = stream_avatar(key)
+        content_type = response.headers.get("Content-Type", "image/jpeg")
+        data = response.read()
+        response.close()
+        response.release_conn()
+        return Response(content=data, media_type=content_type)
+    except S3Error:
+        raise HTTPException(status_code=404, detail="Imagem não encontrada.")

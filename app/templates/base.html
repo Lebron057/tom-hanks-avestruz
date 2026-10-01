@@ -17,18 +17,19 @@
         <div class="navbar-links">
             <a href="/catalog" class="{{ 'active' if active_page == 'catalog' else '' }}">🎞️ Catálogo</a>
             <a href="/favorites" class="{{ 'active' if active_page == 'favorites' else '' }}">⭐ Favoritos</a>
+            <a href="/profile/{{ user.id }}" class="{{ 'active' if active_page == 'profile' else '' }}">👤 Perfil</a>
             {% if user.role == 'admin' %}
             <a href="/admin/logs" class="{{ 'active' if active_page == 'admin_logs' else '' }}">🛡️ Logs</a>
             {% endif %}
         </div>
         <div style="display: flex; align-items: center; gap: 1rem;">
-            <div class="navbar-user">
+            <a href="/profile/{{ user.id }}" class="navbar-user" style="text-decoration: none;">
                 <div class="user-icon">{{ user.nome[0]|upper }}</div>
                 <span>{{ user.nome }}</span>
                 {% if user.role == 'admin' %}
                 <span style="background: rgba(252, 92, 124, 0.2); color: #fc5c7c; font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(252, 92, 124, 0.4); text-transform: uppercase;">Admin</span>
                 {% endif %}
-            </div>
+            </a>
             <a href="/logout" class="btn btn-ghost btn-sm">Sair</a>
         </div>
     </nav>

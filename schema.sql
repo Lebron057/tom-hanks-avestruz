@@ -3,12 +3,15 @@
 -- ==========================================================
 
 -- 1. Tabela de Usuários com suporte a Papéis (Role: 'user' ou 'admin')
+--    + Atividade 6: bio (TEXT) e avatar_key (VARCHAR) para perfil com MinIO.
 CREATE TABLE IF NOT EXISTS usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     senha_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
+    bio TEXT,
+    avatar_key VARCHAR(512),  -- chave do objeto no MinIO; NUNCA armazenar o binário aqui
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

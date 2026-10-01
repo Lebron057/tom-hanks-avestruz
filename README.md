@@ -1,6 +1,6 @@
 # 🎬 Catálogo de Filmes — Tom Hanks (Arquitetura de Microsserviços)
 
-Aplicação web desenvolvida em arquitetura de microsserviços com Python (FastAPI) e Docker. Permite explorar a filmografia de Tom Hanks ao vivo da API TMDB, favoritar filmes, comentar, controlar papéis de acesso, redefinir senhas com envio de e-mails via Mailtrap, e registrar logs de auditoria centralizados com Redis Streams.
+Aplicação web desenvolvida em arquitetura de microsserviços com Python (FastAPI) e Docker. Permite explorar a filmografia de Tom Hanks ao vivo da API TMDB, favoritar filmes, comentar, controlar papéis de acesso, redefinir senhas com envio de e-mails via Mailtrap, registrar logs de auditoria centralizados com Redis Streams, e gerenciar um **perfil de usuário com foto e biografia** armazenadas no **MinIO** (Object Storage).
 
 **Professor:** [@siriani](https://github.com/siriani)
 
@@ -58,6 +58,12 @@ A aplicação foi decomposta em três serviços independentes interconectados vi
    - Armazena eventos de auditoria em **Redis Streams** (`XADD`/`XREVRANGE`).
    - Volume persistente (`redis-data`) para manter dados entre restarts.
 
+5. **`MinIO`** — Porta `9000` API (somente interna) / `9001` Console (pública opção):
+   - Object Storage compatível com S3 para armazenamento de fotos de perfil (avatares).
+   - O `catalog-service` é o único que escreve no bucket. As credenciais ficam apenas no servidor.
+   - O MinIO **não exposta a porta 9000 no host**. O `catalog-service` serve as imagens via proxy em `/storage/avatars/<filename>`.
+   - Volume persistente (`minio-data`) para manter as fotos entre restarts.
+
 ### Fluxo de Eventos de Auditoria
 
 Toda ação relevante do sistema gera um evento HTTP `POST` para o `log-service`:
@@ -70,7 +76,9 @@ Toda ação relevante do sistema gera um evento HTTP `POST` para o `log-service`
 | `comentar` | `catalog-service` | Usuário adiciona comentário |
 | `remover_comentario_admin` | `catalog-service` | Admin remove comentário de outro usuário (moderação) |
 | `remover_comentario_proprio` | `catalog-service` | Usuário remove próprio comentário |
-| `acesso_negado_403` | `catalog-service` | Tentativa de ação sem permissão |
+| `perfil.atualizado` | `catalog-service` | Usuário atualizou bio e/ou foto de perfil |
+| `acesso_negado_403` | `catalog-service` | Tentativa de ação sem permissão (inclui editar perfil alheio) |
+| `audit.security.access_denied` | `catalog-service` | Tentativa específica de editar o perfil de outro usuário |
 
 **Importante:** O envio de logs é "best-effort" — falhas no `log-service` são tratadas com `try/except` silencioso e não derrubam a ação principal do usuário.
 
@@ -89,6 +97,7 @@ Optamos por **Redis Streams** (`XADD`/`XREVRANGE`) em vez de listas simples (`LP
 - 🔑 **Recuperação de Senha Segura**: Disparo de e-mail via SMTP (Mailtrap) com link e token criptográfico de uso único com expiração em 30 minutos.
 - 🎞️ **Catálogo TMDB ao Vivo**: Busca de filmes em tempo real na API TMDB (sem salvar o catálogo desnecessariamente no banco).
 - ⭐ **Favoritos & Comentários**: Dados segregados e protegidos contra IDOR gravados no MariaDB individual.
+- 👤 **Perfil de Usuário (Atividade 6)**: Página de perfil estilo rede social com foto de avatar e biografia. A foto é armazenada no **MinIO** (Object Storage); o banco guarda apenas a chave do objeto.
 - 🛡️ **Segurança Total**: Nenhuma credencial ou chave hardcoded no código; injeção estrita via variáveis de ambiente.
 - 🔒 **Autorização RBAC**: Controle de acesso baseado em papéis (`user` / `admin`) com enforcement no backend.
 - 📋 **Logs de Auditoria Centralizado**: Microsserviço dedicado com Redis Streams para registro imutável de "quem fez o quê, e quando".
@@ -145,6 +154,7 @@ No **Padrão B**, o `role` seria incluído diretamente dentro do payload (claims
 | Autenticação      | FastAPI + Jose JWT + Passlib bcrypt |
 | Logs / Auditoria  | FastAPI + Redis Streams (log-service) |
 | Envio de E-mails  | Python SMTP (Mailtrap)              |
+| Object Storage    | MinIO (compatível com S3)           |
 | Banco de Dados    | MariaDB                             |
 | Cache de Eventos  | Redis 7 Alpine                      |
 | API Externa       | TMDB (The Movie Database)           |
@@ -198,6 +208,11 @@ Acesse no navegador:
 | `SMTP_PASSWORD`     | Senha SMTP Mailtrap                               |                   |
 | `SMTP_FROM`         | E-mail remetente de notificações                  | `noreply@catalogofilmes.com` |
 | `APP_PORT`          | Porta pública mapeada no container                | `8000`            |
+| `MINIO_ENDPOINT`    | Endpoint interno do MinIO                         | `minio:9000`      |
+| `MINIO_ROOT_USER`   | Usuário admin do MinIO (**obrigatório**, mín. 3 chars) | `minioadmin`   |
+| `MINIO_ROOT_PASSWORD` | Senha admin do MinIO (**obrigatório**, mín. 8 chars) | `minioadmin`  |
+| `MINIO_BUCKET`      | Nome do bucket para avatares                      | `avatars`         |
+| `MINIO_CONSOLE_PORT`| Porta pública do console web do MinIO             | `9001`            |
 
 ---
 
@@ -205,11 +220,12 @@ Acesse no navegador:
 
 ```
 ├── app/                        # catalog-service (Público)
-│   ├── main.py                 # Rotas da UI, catálogo, repasse HTTP e disparo de logs
+│   ├── main.py                 # Rotas da UI, catálogo, perfil, repasse HTTP e disparo de logs
 │   ├── auth.py                 # Cliente HTTP assíncrono para o auth-service
 │   ├── tmdb.py                 # Consumo da API TMDB
-│   ├── database.py             # Conexão e init de favoritos/comentários
-│   ├── templates/              # Telas Jinja2 (login, register, catalog, admin_logs)
+│   ├── database.py             # Conexão e init de tabelas (inclui migração bio/avatar_key)
+│   ├── minio_client.py         # Cliente MinIO: bucket, upload, remoção e proxy de avatares
+│   ├── templates/              # Telas Jinja2 (login, register, catalog, profile, admin_logs)
 │   └── static/                 # Estilos e design system (CSS)
 │
 ├── auth_service/               # auth-service (Privado)
@@ -219,15 +235,15 @@ Acesse no navegador:
 │   ├── mailer.py               # Disparo real de e-mails via Mailtrap SMTP
 │   └── database.py             # Conexão e garantia de schema (usuarios, reset_tokens)
 │
-├── log_service/                # log-service (Privado) — NOVO (Atividade 5)
+├── log_service/                # log-service (Privado) — Atividade 5
 │   ├── __init__.py             # Pacote Python
 │   └── main.py                 # Endpoints de log: POST /logs, GET /logs, GET /health
 │
-├── schema.sql                  # Script SQL do banco de dados
+├── schema.sql                  # Script SQL do banco de dados (incl. bio e avatar_key)
 ├── Dockerfile                  # Imagem base dos microsserviços
-├── docker-compose.yml          # Orquestração com rede internal-net (inclui redis + log-service)
-├── requirements.txt            # Dependências Python (inclui redis)
-├── .env.example                # Modelo de variáveis de ambiente (inclui LOG_SERVICE_URL, REDIS_*)
+├── docker-compose.yml          # Orquestração com rede internal-net (incl. redis + log-service + minio)
+├── requirements.txt            # Dependências Python (incl. redis, minio)
+├── .env.example                # Modelo de variáveis de ambiente
 └── README.md                   # Documentação do projeto
 ```
 
@@ -236,3 +252,45 @@ Acesse no navegador:
 
 ## ✉️ imagem do sistema ao tentar acessar o link de recuperação de senha após 30 minutos ou após já ter utilizado
 ![alt text](image-1.png)
+
+---
+
+## 🗄️ Object Storage (MinIO) — Atividade 6
+
+### Decisão do Modelo de Acesso ao Bucket
+
+Foi adotada a **Opção A — Bucket com leitura pública** (`s3:GetObject` para todos).
+
+#### Trade-offs
+
+| Critério | Opção A (Pública) | Opção B (URLs pré-assinadas) |
+|----------|:---:|:---:|
+| Complexidade | Baixa | Alta |
+| URLs permanentes | ✅ | ❌ (expiram) |
+| Controle de acesso | Baixo (qualquer um com a URL acessa) | Alto |
+| Caching no browser | ✅ Simples | Complexo (URL muda) |
+| Revogação de acesso | Só deletando o objeto | Basta não gerar nova URL |
+
+**Justificativa da escolha:** As fotos de perfil são informações intencionalmente pública (mesma lógica de um avatar em rede social). A simplicidade da Opção A não exige gerar/renovar URLs em cada requisição, o que reduz latência e complexidade. O risco (“qualquer pessoa com a URL exata pode ver a foto”) é aceitável dado o contexto acadêmico e o tipo de dado.
+
+> Caso o requisito mude para fotos privadas, a Opção B pode ser implementada gerando URLs pré-assinadas com `client.presigned_get_object(bucket, key, expires=timedelta(hours=1))` e ajustando a rota `/storage/avatars/<filename>` para redirecionar para a URL temporária.
+
+### Fluxo de Upload
+
+```
+Navegador ──POST /profile/{id}/upload──► catalog-service
+                                           │ 1. Valida JWT + ID (403 se diferente)
+                                           │ 2. Valida MIME type e tamanho (≤ 3 MB)
+                                           │ 3. Envia binário ────────────► MinIO (bucket: avatars)
+                                           │ 4. Grava bio + avatar_key ──► MariaDB
+                                           │ 5. Remove foto anterior do MinIO (best-effort)
+Navegador ──GET /storage/avatars/{file}──► catalog-service ─lê do─► MinIO
+```
+
+### Segurança
+
+- O `PUT` compara o `id` da URL com o `user_id` extraído do JWT. Se forem diferentes, responde **HTTP 403** e registra o evento `audit.security.access_denied`.
+- O backend **nunca confia** no `user_id` enviado no corpo da requisição.
+- Credenciais MinIO (`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`) ficam apenas no servidor.
+- Leitura pública cobre apenas `s3:GetObject`. Escrita é exclusiva do backend.
+- Ao trocar de foto, a anterior é removida do bucket para evitar objetos órfãos.

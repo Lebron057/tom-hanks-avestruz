@@ -39,6 +39,24 @@ def init_db():
     except Exception as e:
         print(f"Aviso ao verificar/adicionar coluna role: {e}")
 
+    # Migração segura (Atividade 6): garante que a coluna 'bio' exista
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'bio'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN bio TEXT")
+    except Exception as e:
+        print(f"Aviso ao verificar/adicionar coluna bio: {e}")
+
+    # Migração segura (Atividade 6): garante que a coluna 'avatar_key' exista.
+    # Armazena APENAS a chave do objeto no MinIO (ex: "avatars/42-1727123456-abc.jpg").
+    # NUNCA armazena o binário da imagem no banco de dados.
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'avatar_key'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN avatar_key VARCHAR(512)")
+    except Exception as e:
+        print(f"Aviso ao verificar/adicionar coluna avatar_key: {e}")
+
     # 2. Tabela de Tokens para Reset de Senha (expiração e controle de uso)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reset_tokens (
@@ -81,4 +99,3 @@ def init_db():
     conn.commit()
     cursor.close()
     conn.close()
-

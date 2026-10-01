@@ -1,10 +1,6 @@
-version: "3.8"
-
 services:
   catalog-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lebron057/catalog-service:latest
     container_name: catalog-service-iago
     ports:
       - "${APP_PORT:-8000}:8000"
@@ -18,17 +14,21 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8001}
       - LOG_SERVICE_URL=${LOG_SERVICE_URL:-http://log-service:8002}
+      # Garage — acesso interno (o catalog-service proxy as imagens)
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-garage:9000}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-avatars}
     depends_on:
       - auth-service
       - log-service
+      - garage
     networks:
       - internal-net
     restart: unless-stopped
 
   auth-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lebron057/auth-service:latest
     container_name: auth-service-iago
     command: ["uvicorn", "auth_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
     expose:
@@ -53,9 +53,7 @@ services:
     restart: unless-stopped
 
   log-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lebron057/log-service:latest
     container_name: log-service-iago
     command: ["uvicorn", "log_service.main:app", "--host", "0.0.0.0", "--port", "8002"]
     expose:
@@ -70,6 +68,56 @@ services:
       - internal-net
     restart: unless-stopped
 
+  garage:
+    image: dxflrs/garage:v0.9.1
+    container_name: garage-iago
+    environment:
+      - GARAGE_RPC_SECRET=c29tZS1zZWNyZXQtZm9yLXJwYy1nYXJhZ2U=
+    entrypoint: /bin/sh
+    command: >
+      -c '
+      echo "[metadata]" > /etc/garage.toml;
+      echo "node_id = \"dc1\"" >> /etc/garage.toml;
+      echo "metadata_dir = \"/var/lib/garage/meta\"" >> /etc/garage.toml;
+      echo "data_dir = \"/var/lib/garage/data\"" >> /etc/garage.toml;
+      echo "[rpc]" >> /etc/garage.toml;
+      echo "bind_addr = \"[::]:3901\"" >> /etc/garage.toml;
+      echo "public_addr = \"127.0.0.1:3901\"" >> /etc/garage.toml;
+      echo "[s3_api]" >> /etc/garage.toml;
+      echo "s3_region = \"us-east-1\"" >> /etc/garage.toml;
+      echo "api_bind_addr = \"[::]:9000\"" >> /etc/garage.toml;
+      echo "root_domain = \".s3.garage.localhost\"" >> /etc/garage.toml;
+      
+      /garage server &
+      sleep 3;
+      
+      NODE_ID=\$$(/garage node id | grep -o "[0-9a-f]\{64\}" || true);
+      if [ -n "$$NODE_ID" ]; then
+        /garage layout assign -z dc1 -c 1G $$NODE_ID || true;
+        /garage layout apply --version 1 || true;
+      fi
+      
+      /garage key import minioadmin minioadmin --yes || true;
+      /garage bucket create avatars || true;
+      /garage bucket allow avatars --read --write --key minioadmin || true;
+      
+      wait
+      '
+    expose:
+      - "9000"
+    ports:
+      - "9000:9000"
+    volumes:
+      - garage-data:/var/lib/garage
+    networks:
+      - internal-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: redis-iago
@@ -82,6 +130,10 @@ services:
 networks:
   internal-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 10.75.0.0/16
 
 volumes:
   redis-data:
+  garage-data:
