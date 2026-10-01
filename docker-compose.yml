@@ -69,13 +69,16 @@ services:
     restart: unless-stopped
 
   garage:
-    image: dxflrs/garage:v0.9.1
+    image: alpine:latest
     container_name: garage-iago
     environment:
       - GARAGE_RPC_SECRET=c29tZS1zZWNyZXQtZm9yLXJwYy1nYXJhZ2U=
-    entrypoint: /bin/sh
     command: >
-      -c '
+      sh -c '
+      apk add wget;
+      wget https://garagehq.deuxfleurs.fr/_releases/v0.9.1/x86_64-unknown-linux-musl/garage -O /usr/local/bin/garage;
+      chmod +x /usr/local/bin/garage;
+      
       echo "[metadata]" > /etc/garage.toml;
       echo "node_id = \"dc1\"" >> /etc/garage.toml;
       echo "metadata_dir = \"/var/lib/garage/meta\"" >> /etc/garage.toml;
@@ -88,25 +91,25 @@ services:
       echo "api_bind_addr = \"[::]:9000\"" >> /etc/garage.toml;
       echo "root_domain = \".s3.garage.localhost\"" >> /etc/garage.toml;
       
-      /garage server &
+      /usr/local/bin/garage server &
       sleep 3;
       
-      NODE_ID=\$$(/garage node id | grep -o "[0-9a-f]\{64\}" || true);
+      NODE_ID=\$$(/usr/local/bin/garage node id | grep -o "[0-9a-f]\{64\}" || true);
       if [ -n "$$NODE_ID" ]; then
-        /garage layout assign -z dc1 -c 1G $$NODE_ID || true;
-        /garage layout apply --version 1 || true;
+        /usr/local/bin/garage layout assign -z dc1 -c 1G $$NODE_ID || true;
+        /usr/local/bin/garage layout apply --version 1 || true;
       fi
       
-      /garage key import minioadmin minioadmin --yes || true;
-      /garage bucket create avatars || true;
-      /garage bucket allow avatars --read --write --key minioadmin || true;
+      /usr/local/bin/garage key import minioadmin minioadmin --yes || true;
+      /usr/local/bin/garage bucket create avatars || true;
+      /usr/local/bin/garage bucket allow avatars --read --write --key minioadmin || true;
       
       wait
       '
     expose:
       - "9000"
     ports:
-      - "9000:9000"
+      - "9050:9000"
     volumes:
       - garage-data:/var/lib/garage
     networks:
