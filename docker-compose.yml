@@ -1,5 +1,6 @@
 services:
   catalog-service:
+    build: .
     image: lebron057/catalog-service:latest
     container_name: catalog-service-iago
     ports:
@@ -72,40 +73,47 @@ services:
     image: alpine:latest
     container_name: garage-iago
     environment:
-      - GARAGE_RPC_SECRET=c29tZS1zZWNyZXQtZm9yLXJwYy1nYXJhZ2U=
-    command: >
-      sh -c '
-      apk add wget;
-      wget https://garagehq.deuxfleurs.fr/_releases/v0.9.1/x86_64-unknown-linux-musl/garage -O /usr/local/bin/garage;
-      chmod +x /usr/local/bin/garage;
-      
-      echo "[metadata]" > /etc/garage.toml;
-      echo "node_id = \"dc1\"" >> /etc/garage.toml;
-      echo "metadata_dir = \"/var/lib/garage/meta\"" >> /etc/garage.toml;
-      echo "data_dir = \"/var/lib/garage/data\"" >> /etc/garage.toml;
-      echo "[rpc]" >> /etc/garage.toml;
-      echo "bind_addr = \"[::]:3901\"" >> /etc/garage.toml;
-      echo "public_addr = \"127.0.0.1:3901\"" >> /etc/garage.toml;
-      echo "[s3_api]" >> /etc/garage.toml;
-      echo "s3_region = \"us-east-1\"" >> /etc/garage.toml;
-      echo "api_bind_addr = \"[::]:9000\"" >> /etc/garage.toml;
-      echo "root_domain = \".s3.garage.localhost\"" >> /etc/garage.toml;
-      
-      /usr/local/bin/garage server &
-      sleep 3;
-      
-      NODE_ID=\$$(/usr/local/bin/garage node id | grep -o "[0-9a-f]\{64\}" || true);
-      if [ -n "$$NODE_ID" ]; then
-        /usr/local/bin/garage layout assign -z dc1 -c 1G $$NODE_ID || true;
-        /usr/local/bin/garage layout apply --version 1 || true;
-      fi
-      
-      /usr/local/bin/garage key import minioadmin minioadmin --yes || true;
-      /usr/local/bin/garage bucket create avatars || true;
-      /usr/local/bin/garage bucket allow avatars --read --write --key minioadmin || true;
-      
-      wait
-      '
+      - GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET}
+      # Access Key ID deve ter formato GKxxxxxxxxxxxxxxxxxxxxxxxx (prefixo GK + 26 hex)
+      - GARAGE_KEY_ID=${MINIO_ROOT_USER}
+      - GARAGE_KEY_SECRET=${MINIO_ROOT_PASSWORD}
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache wget
+        wget -q https://garagehq.deuxfleurs.fr/_releases/v0.9.1/x86_64-unknown-linux-musl/garage -O /usr/local/bin/garage
+        chmod +x /usr/local/bin/garage
+
+        cat > /etc/garage.toml <<EOF
+        metadata_dir = "/var/lib/garage/meta"
+        data_dir = "/var/lib/garage/data"
+        db_engine = "lmdb"
+        replication_mode = "none"
+        rpc_bind_addr = "[::]:3901"
+        rpc_public_addr = "127.0.0.1:3901"
+        rpc_secret = "$$GARAGE_RPC_SECRET"
+
+        [s3_api]
+        s3_region = "us-east-1"
+        api_bind_addr = "[::]:9000"
+        root_domain = ".s3.garage.localhost"
+        path_style = true
+        EOF
+
+        garage server &
+        sleep 8
+
+        NODE_ID=$$(garage node id 2>/dev/null | head -n1 | cut -d@ -f1)
+        garage layout assign -z dc1 -c 1G $$NODE_ID || true
+        garage layout apply --version 1 || true
+
+        # 'key import' aceita chave arbitrária somente com flag -n (nome) e --yes
+        garage key import -n appkey --yes $$GARAGE_KEY_ID $$GARAGE_KEY_SECRET || true
+        garage bucket create avatars || true
+        garage bucket allow --read --write --key $$GARAGE_KEY_ID avatars || true
+
+        wait
     expose:
       - "9000"
     ports:
@@ -116,10 +124,11 @@ services:
       - internal-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/garage", "status"]
-      interval: 10s
+      test: ["CMD-SHELL", "garage -c /etc/garage.toml status || exit 1"]
+      interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 60s
 
   redis:
     image: redis:7-alpine

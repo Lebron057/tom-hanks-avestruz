@@ -837,6 +837,16 @@ async def profile_upload(
 
     # ── Processar upload de imagem (se enviado) ──
     if foto and foto.filename:
+        # Garante que o bucket exista (lazy init — caso o Garage não estivesse
+        # pronto quando o catalog-service iniciou)
+        try:
+            ensure_bucket()
+        except Exception as _bucket_err:
+            return RedirectResponse(
+                url=f"/profile/{profile_user_id}?error=Storage+indisponível.+Tente+novamente+em+instantes.",
+                status_code=302,
+            )
+
         # Validação de MIME type no backend
         if foto.content_type not in ALLOWED_MIME_TYPES:
             return RedirectResponse(

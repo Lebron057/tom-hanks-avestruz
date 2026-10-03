@@ -39,6 +39,8 @@ def get_minio_client() -> Minio:
             access_key=MINIO_ACCESS_KEY,
             secret_key=MINIO_SECRET_KEY,
             secure=_secure,
+            # Garage exige path-style (http://host:port/bucket/object)
+            # em vez de virtual-host-style (http://bucket.host:port/object)
         )
     return _client
 
@@ -67,8 +69,13 @@ def ensure_bucket() -> None:
                 }}
             ]
         }}"""
-        client.set_bucket_policy(MINIO_BUCKET, public_policy)
-        print(f"[MinIO] Bucket '{MINIO_BUCKET}' pronto (leitura pública).")
+        try:
+            client.set_bucket_policy(MINIO_BUCKET, public_policy)
+            print(f"[MinIO] Bucket '{MINIO_BUCKET}' pronto (leitura pública).")
+        except S3Error as policy_err:
+            # Garage v0.9 tem suporte limitado a bucket policies — não é fatal
+            print(f"[MinIO] Aviso: não foi possível definir policy pública: {policy_err}")
+            print(f"[MinIO] Bucket '{MINIO_BUCKET}' pronto (policy ignorada).")
     except S3Error as e:
         print(f"[MinIO] Erro ao preparar bucket: {e}")
         raise
