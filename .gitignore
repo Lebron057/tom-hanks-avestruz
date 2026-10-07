@@ -8,3 +8,5 @@ build/
 .venv/
 venv/
 slides/
+take_screenshots.py
+take_screenshots.spec
