@@ -36,6 +36,7 @@ class UserResponse(BaseModel):
     nome: str
     email: str
     role: str
+    premium: bool = False
 
 
 class TokenResponse(BaseModel):

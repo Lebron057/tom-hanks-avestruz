@@ -269,6 +269,11 @@
     </div>
     <div class="profile-info">
       <h1 class="profile-name">{{ profile_user.nome }}</h1>
+      {% if profile_user.premium %}
+      <span style="display: inline-block; font-size: 0.72rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.6rem; background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);">
+        ⭐ Membro Premium
+      </span>
+      {% endif %}
       {% if profile_user.role == 'admin' %}
       <span class="profile-role-badge">Admin</span>
       {% endif %}
@@ -291,6 +296,44 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Banner de Status Premium / Upgrade (para o dono do perfil) -->
+{% if is_own_profile %}
+<div class="edit-section" style="margin-bottom: 0; padding-top: 1.5rem;">
+  {% if not profile_user.premium %}
+  <div class="edit-card" style="border: 1px solid #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.03));">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
+      <div>
+        <h2 style="color: #f59e0b; margin: 0 0 0.4rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.25rem;">
+          ⭐ Faça Upgrade para o Plano Premium
+        </h2>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 0.5rem; max-width: 550px;">
+          Desbloqueie favoritos ilimitados (limite atual de 3 filmes no plano gratuito), exiba o selo VIP exclusivo no seu perfil e apoie a plataforma.
+        </p>
+        <span style="font-size: 0.8rem; color: #f59e0b; font-weight: 600;">Apenas R$ 19,90 / mês · Modo de Teste Stripe</span>
+      </div>
+      <div>
+        <a href="/checkout/subscribe" class="btn" style="background: linear-gradient(135deg, #f59e0b, #eab308); color: #18181b; font-weight: 800; border: none; border-radius: 999px; padding: 10px 22px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4); font-size: 0.95rem;">
+          ⭐ Assinar Plano Premium
+        </a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="edit-card" style="border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.06);">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span style="font-size: 2rem;">⭐</span>
+      <div>
+        <h3 style="color: #f59e0b; margin: 0 0 0.25rem; font-size: 1.1rem; font-weight: 700;">Assinatura Premium Ativa</h3>
+        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+          Você possui acesso a todos os benefícios VIP, incluindo filmes favoritos ilimitados e selo dourado exclusivo.
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 <!-- Formulário de edição (só para dono do perfil) -->
 {% if is_own_profile %}

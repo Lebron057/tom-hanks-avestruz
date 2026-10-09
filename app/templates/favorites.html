@@ -13,11 +13,34 @@
     {% endif %}
 
     {% if favorites %}
-    <div style="text-align: center;">
-        <div class="stats-badge">
-            ⭐ <span class="count">{{ favorites|length }}</span> filme{{ 's' if favorites|length != 1 else '' }} favoritado{{ 's' if favorites|length != 1 else '' }}
+    <div style="text-align: center; display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        {% if user.premium %}
+        <div class="stats-badge" style="background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #f59e0b;">
+            ⭐ <span class="count">{{ favorites|length }}</span> filme{{ 's' if favorites|length != 1 else '' }} · <strong>Plano Premium (Ilimitado)</strong>
         </div>
+        {% else %}
+        <div class="stats-badge" style="background: rgba(100, 116, 139, 0.2); border: 1px solid rgba(148, 163, 184, 0.3);">
+            ⭐ Favoritos:
+            {% if favorites|length >= 3 %}
+            <span class="count" style="color: #ef4444;">{{ favorites|length }}/3</span> (Plano Free)
+            {% else %}
+            <span class="count" style="color: #f59e0b;">{{ favorites|length }}/3</span> (Plano Free)
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
+
+    {% if not user.premium and favorites|length >= 3 %}
+    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.05)); border: 1px solid #f59e0b; border-radius: 12px; padding: 1rem 1.5rem; margin: 0 auto 2rem; max-width: 680px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+        <div>
+            <strong style="color: #f59e0b; font-size: 0.95rem;">⚠️ Você atingiu a cota máxima de 3 favoritos gratuitos!</strong>
+            <p style="margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.85rem;">Assine o Plano Premium para salvar quantos filmes desejar.</p>
+        </div>
+        <a href="/checkout/subscribe" class="btn btn-sm" style="background: linear-gradient(135deg, #f59e0b, #eab308); color: #18181b; font-weight: 800; border: none; border-radius: 999px; padding: 6px 14px; text-decoration: none; white-space: nowrap; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);">
+            ⭐ Assinar por R$ 19,90/mês
+        </a>
+    </div>
+    {% endif %}
 
     <div class="favorites-list">
         {% for fav in favorites %}

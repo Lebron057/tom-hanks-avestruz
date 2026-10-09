@@ -33,6 +33,12 @@ from app.auth import (
 from app.tmdb import get_tom_hanks_movies, get_movie_details
 from app.minio_client import ensure_bucket, upload_avatar, delete_avatar, stream_avatar, MINIO_BUCKET
 from minio.error import S3Error
+import stripe
+from app.stripe_service import (
+    create_premium_checkout_session,
+    verify_and_construct_webhook_event,
+    is_stripe_configured,
+)
 
 # ── Configuração do MinIO ────────────────────────────────
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
@@ -351,14 +357,146 @@ async def logout(request: Request):
 
 
 # ══════════════════════════════════════════════════════════
+#  ASSINATURA PREMIUM & WEBHOOK STRIPE (Atividade 7)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/checkout/subscribe")
+@app.post("/checkout/create-session")
+async def checkout_subscribe(request: Request):
+    """
+    Inicia o fluxo de assinatura do Plano Premium.
+    Cria uma Checkout Session no Stripe (em modo de teste) e redireciona
+    o usuário autenticado diretamente para a página de pagamento hospedada pelo Stripe.
+    Nenhum dado sensível de cartão trafega pela nossa aplicação.
+    """
+    user = await _get_user_or_none(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    if user.get("premium", False):
+        return RedirectResponse(url="/catalog?message=Você+já+possui+o+Plano+Premium+ativo!", status_code=302)
+
+    if not is_stripe_configured():
+        return RedirectResponse(
+            url="/catalog?error=O+sistema+de+pagamentos+Stripe+ainda+não+foi+configurado+pelo+administrador.",
+            status_code=302,
+        )
+
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        session = create_premium_checkout_session(
+            usuario_id=user["id"],
+            user_email=user["email"],
+            user_nome=user["nome"],
+            base_url=base_url,
+        )
+
+        await _emit_log(
+            usuario_id=user["id"],
+            acao="stripe.checkout_iniciado",
+            detalhe=f"session_id={session.id}",
+            ip_origem=_get_client_ip(request),
+        )
+
+        # Redirecionamento 303 (See Other) para a página hospedada pelo Stripe
+        return RedirectResponse(url=session.url, status_code=303)
+    except Exception as e:
+        print(f"[Stripe] Erro ao criar Checkout Session: {e}")
+        return RedirectResponse(
+            url=f"/catalog?error=Erro+ao+iniciar+pagamento+no+Stripe:+{e}",
+            status_code=302,
+        )
+
+
+@app.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """
+    Endpoint de Webhook público chamado de forma assíncrona pelo Stripe.
+    Validação Criptográfica Obrigatória: Verifica a assinatura no cabeçalho Stripe-Signature
+    usando o STRIPE_WEBHOOK_SECRET antes de processar qualquer evento.
+    Ao confirmar checkout.session.completed, atualiza MariaDB: premium = TRUE.
+    """
+    sig_header = request.headers.get("stripe-signature")
+    if not sig_header:
+        raise HTTPException(status_code=400, detail="Cabeçalho Stripe-Signature ausente.")
+
+    payload = await request.body()
+
+    try:
+        event = verify_and_construct_webhook_event(payload, sig_header)
+    except ValueError as e:
+        print(f"[Webhook] Erro de configuração: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except stripe.SignatureVerificationError as e:
+        print(f"[Webhook] Assinatura inválida rejeitada: {e}")
+        raise HTTPException(status_code=400, detail="Assinatura criptográfica do Stripe inválida.")
+
+    event_type = event.get("type", "")
+
+    # Evento 1: Sessão de checkout concluída com sucesso
+    if event_type == "checkout.session.completed":
+        session = event["data"]["object"]
+        usuario_id_str = session.get("client_reference_id") or (session.get("metadata") or {}).get("usuario_id")
+
+        if usuario_id_str:
+            usuario_id = int(usuario_id_str)
+            customer_id = session.get("customer")
+            subscription_id = session.get("subscription")
+
+            conn = get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """UPDATE usuarios
+                       SET premium = TRUE, stripe_customer_id = %s, stripe_subscription_id = %s
+                       WHERE id = %s""",
+                    (customer_id, subscription_id, usuario_id),
+                )
+                conn.commit()
+            finally:
+                cursor.close()
+                conn.close()
+
+            await _emit_log(
+                usuario_id=usuario_id,
+                acao="stripe.assinatura_ativada",
+                detalhe=f"session_id={session.get('id')}, customer={customer_id}",
+                ip_origem=_get_client_ip(request),
+            )
+
+    # Evento 2: Assinatura cancelada ou expirada
+    elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
+        subscription = event["data"]["object"]
+        subscription_id = subscription.get("id")
+        if subscription_id:
+            conn = get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "UPDATE usuarios SET premium = FALSE WHERE stripe_subscription_id = %s",
+                    (subscription_id,),
+                )
+                conn.commit()
+            finally:
+                cursor.close()
+                conn.close()
+
+    return {"status": "success", "event_type": event_type}
+
+
+# ══════════════════════════════════════════════════════════
 #  ROTAS PROTEGIDAS (CATÁLOGO, FAVORITOS E COMENTÁRIOS)
 # ══════════════════════════════════════════════════════════
 
 @app.get("/catalog", response_class=HTMLResponse)
-async def catalog_page(request: Request, message: str = None):
+async def catalog_page(request: Request, message: str = None, error: str = None):
     user = await _get_user_or_none(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
+
+    # Feedback de sucesso após retorno da página de checkout do Stripe
+    if request.query_params.get("premium_success") == "true":
+        message = "🎉 Parabéns! Sua assinatura do Plano Premium foi confirmada. Agora você tem favoritos ilimitados e selo VIP exclusivo!"
 
     # Buscar filmes da TMDB em tempo real (sem persistência desnecessária no banco)
     try:
@@ -386,8 +524,10 @@ async def catalog_page(request: Request, message: str = None):
         "active_page": "catalog",
         "movies": movies,
         "favorited_ids": favorited_ids,
+        "total_favorites": len(favorited_ids),
+        "stripe_configured": is_stripe_configured(),
         "message": message,
-        "error": None,
+        "error": error,
     })
 
 
@@ -402,9 +542,29 @@ async def add_favorite(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
 
+    # ── Limite de Favoritos (Benefício Verificável do Plano Premium) ──
+    # Usuários Free: limite estrito de 3 filmes favoritados
+    # Usuários Premium: favoritos ilimitados
+    is_premium = user.get("premium", False)
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        if not is_premium:
+            cursor.execute("SELECT COUNT(*) AS total FROM favoritos WHERE usuario_id = %s", (user["id"],))
+            total_favs = cursor.fetchone().get("total", 0)
+            if total_favs >= 3:
+                # Evento de auditoria: limite free atingido
+                await _emit_log(
+                    usuario_id=user["id"],
+                    acao="favorito.limite_atingido",
+                    detalhe=f"total={total_favs}, limite=3 (bloqueado, requer premium)",
+                    ip_origem=_get_client_ip(request),
+                )
+                return RedirectResponse(
+                    url="/catalog?error=Limite+de+3+favoritos+atingido+no+plano+gratuito!+Faça+upgrade+para+o+Plano+Premium+para+favoritar+quantos+filmes+quiser.",
+                    status_code=302,
+                )
+
         cursor.execute(
             """INSERT IGNORE INTO favoritos (usuario_id, tmdb_movie_id, titulo, poster_path)
                VALUES (%s, %s, %s, %s)""",
@@ -762,7 +922,7 @@ async def profile_page(request: Request, profile_user_id: int, message: str = No
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, nome, email, role, bio, avatar_key FROM usuarios WHERE id = %s",
+            "SELECT id, nome, email, role, bio, avatar_key, premium FROM usuarios WHERE id = %s",
             (profile_user_id,),
         )
         profile_user = cursor.fetchone()
@@ -797,6 +957,7 @@ async def profile_page(request: Request, profile_user_id: int, message: str = No
         "avatar_url": avatar_url,
         "favorites": favorites,
         "is_own_profile": is_own_profile,
+        "stripe_configured": is_stripe_configured(),
         "message": message,
         "error": error,
     })

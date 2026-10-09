@@ -24,14 +24,15 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 
-def create_access_token(usuario_id: int, nome: str, email: str, role: str = "user") -> str:
-    """Gera um token JWT contendo os dados de sessão do usuário e papel."""
+def create_access_token(usuario_id: int, nome: str, email: str, role: str = "user", premium: bool = False) -> str:
+    """Gera um token JWT contendo os dados de sessão do usuário, papel e status premium."""
     expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": str(usuario_id),
         "nome": nome,
         "email": email,
         "role": role,
+        "premium": bool(premium),
         "exp": expire,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

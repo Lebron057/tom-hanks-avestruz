@@ -26,10 +26,18 @@
             <a href="/profile/{{ user.id }}" class="navbar-user" style="text-decoration: none;">
                 <div class="user-icon">{{ user.nome[0]|upper }}</div>
                 <span>{{ user.nome }}</span>
+                {% if user.premium %}
+                <span style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); text-transform: uppercase; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 3px;">⭐ PREMIUM</span>
+                {% endif %}
                 {% if user.role == 'admin' %}
                 <span style="background: rgba(252, 92, 124, 0.2); color: #fc5c7c; font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(252, 92, 124, 0.4); text-transform: uppercase;">Admin</span>
                 {% endif %}
             </a>
+            {% if not user.premium %}
+            <a href="/checkout/subscribe" class="btn btn-sm" style="background: linear-gradient(135deg, #f59e0b, #eab308); color: #18181b; font-weight: 800; border-radius: 999px; text-decoration: none; padding: 5px 12px; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3); border: none; font-size: 0.8rem;">
+                ⭐ Seja Premium
+            </a>
+            {% endif %}
             <a href="/logout" class="btn btn-ghost btn-sm">Sair</a>
         </div>
     </nav>

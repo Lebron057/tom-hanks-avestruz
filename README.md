@@ -294,3 +294,89 @@ Navegador ──GET /storage/avatars/{file}──► catalog-service ─lê do�
 - Credenciais MinIO (`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`) ficam apenas no servidor.
 - Leitura pública cobre apenas `s3:GetObject`. Escrita é exclusiva do backend.
 - Ao trocar de foto, a anterior é removida do bucket para evitar objetos órfãos.
+
+---
+
+## 💳 Plano Premium com Stripe — Atividade 7
+
+### Visão Geral & Segurança de Pagamento
+
+A Atividade 7 adiciona o modelo de assinatura de **Plano Premium** com pagamentos integrados via **Stripe** operando estritamente em **Modo de Teste**.
+
+**Regra Inviolável de Segurança:** Nossa aplicação **nunca armazena, recebe ou processa** dados sensíveis de cartão de crédito (número, validade, CVV). Toda a coleta de dados de pagamento ocorre nas páginas seguras hospedadas pela Stripe (*Stripe Hosted Checkout*).
+
+### Arquitetura de Microsserviços e Roteamento do Webhook
+
+Como o `auth-service` opera em rede isolada (`internal-net`) sem portas expostas para a internet, o `catalog-service` (porta pública `8210`) atua como a borda pública responsável por:
+1. Iniciar a **Checkout Session** da Stripe;
+2. Receber a notificação assíncrona do **Webhook** (`POST /webhook/stripe`);
+3. Validar a assinatura criptográfica do evento;
+4. Atualizar o banco de dados MariaDB (`premium = TRUE`).
+
+```
+[ Navegador do Usuário ]
+        │
+        ├───────────────────────────────────────────────────────┐
+        │ 1. Clica em "Seja Premium" (/checkout/subscribe)      │ 3. Paga no Checkout da Stripe
+        ▼                                                       ▼
++───────────────────────────────────+             +──────────────────────────+
+│    catalog-service (Porta 8210)   │ ──(2. Cria)─▶│      Stripe Hosted      │
+│   (Borda pública da aplicação)    │             │         Checkout         │
++───────────────────────────────────+             +─────────────┬────────────+
+        ▲                                                       │
+        │ 4. Webhook assíncrono (POST /webhook/stripe)          │
+        │    - Cabeçalho: Stripe-Signature                      │
+        │    - Evento: checkout.session.completed               │
+        └───────────────────────────────────────────────────────┘
+                                │
+                                ▼ 5. Atualiza usuário (premium = TRUE)
+                    +────────────────────────+
+                    │    MariaDB (Remoto)    │
+                    │   Tabela `usuarios`    │
+                    +────────────────────────+
+```
+
+### Validação Criptográfica do Webhook (Segurança Crítica)
+
+O endpoint `POST /webhook/stripe` não aceita requisições sem verificação criptográfica:
+- Lê o payload bruto em bytes (`await request.body()`);
+- Lê o cabeçalho `Stripe-Signature`;
+- Valida o hash HMAC utilizando o `STRIPE_WEBHOOK_SECRET` via `stripe.Webhook.construct_event(...)`;
+- Requisições sem assinatura válida são rejeitadas imediatamente com **HTTP 400**.
+
+### Benefícios Verificáveis (Feature Premium)
+
+| Funcionalidade | Usuário Comum (Free) | Assinante Premium |
+|---|:---:|:---:|
+| **Limite de Filmes Favoritos** | Máximo de **3 filmes** | **Ilimitado** |
+| **Selo Visual no Perfil e Cabeçalho** | — | **⭐ PREMIUM** (dourado com brilho) |
+| **Acesso ao Catálogo e Comentários** | ✅ Sim | ✅ Sim |
+
+Quando um usuário gratuito atinge o limite de 3 favoritos, novas tentativas de favoritar são bloqueadas pelo backend com feedback visual e link direto para upgrade.
+
+### Variáveis de Ambiente Necessárias (.env)
+
+```ini
+# Stripe (Modo de Teste)
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+> **Aviso de Segurança:** O arquivo `.env` está no `.gitignore` e nunca é enviado ao GitHub.
+
+### Como Testar Localmente com o Stripe CLI
+
+1. Instale o [Stripe CLI](https://stripe.com/docs/stripe-cli) ou utilize o painel de desenvolvedor da Stripe.
+2. Inicie o encaminhamento de webhooks para o container:
+   ```bash
+   stripe listen --forward-to localhost:8210/webhook/stripe
+   ```
+3. Copie o *Webhook Signing Secret* exibido no terminal (`whsec_...`) e adicione ao `.env` como `STRIPE_WEBHOOK_SECRET`.
+4. Dispare um evento de teste:
+   ```bash
+   stripe trigger checkout.session.completed
+   ```
+5. Para testar o fluxo completo pelo navegador, use os cartões de crédito oficiais de teste do Stripe:
+   - **Número:** `4242 4242 4242 4242`
+   - **Validade:** Qualquer data futura (ex: `12/28`)
+   - **CVC:** `123`

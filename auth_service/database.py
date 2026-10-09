@@ -39,6 +39,28 @@ def init_db():
     except Exception as e:
         print(f"[AuthService] Aviso ao verificar coluna role: {e}")
 
+    # Migrações seguras (Atividade 7 - Stripe Premium):
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'premium'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN premium BOOLEAN NOT NULL DEFAULT FALSE")
+    except Exception as e:
+        print(f"[AuthService] Aviso ao verificar coluna premium: {e}")
+
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'stripe_customer_id'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN stripe_customer_id VARCHAR(255)")
+    except Exception as e:
+        print(f"[AuthService] Aviso ao verificar coluna stripe_customer_id: {e}")
+
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'stripe_subscription_id'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN stripe_subscription_id VARCHAR(255)")
+    except Exception as e:
+        print(f"[AuthService] Aviso ao verificar coluna stripe_subscription_id: {e}")
+
     # 2. Tabela de Tokens de Recuperação de Senha
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reset_tokens (

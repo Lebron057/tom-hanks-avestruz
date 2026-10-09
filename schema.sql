@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     role VARCHAR(20) NOT NULL DEFAULT 'user',
     bio TEXT,
     avatar_key VARCHAR(512),  -- chave do objeto no MinIO; NUNCA armazenar o binário aqui
+    premium BOOLEAN NOT NULL DEFAULT FALSE,
+    stripe_customer_id VARCHAR(255),
+    stripe_subscription_id VARCHAR(255),
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

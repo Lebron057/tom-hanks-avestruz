@@ -15,6 +15,8 @@ services:
       - DB_NAME=${DB_NAME}
       - SECRET_KEY=${SECRET_KEY}
       - AUTH_SERVICE_URL=http://auth-service:8001
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
     depends_on:
       - auth-service
     networks:

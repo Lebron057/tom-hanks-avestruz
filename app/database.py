@@ -57,6 +57,28 @@ def init_db():
     except Exception as e:
         print(f"Aviso ao verificar/adicionar coluna avatar_key: {e}")
 
+    # Migrações seguras (Atividade 7 - Stripe Premium):
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'premium'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN premium BOOLEAN NOT NULL DEFAULT FALSE")
+    except Exception as e:
+        print(f"Aviso ao verificar/adicionar coluna premium: {e}")
+
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'stripe_customer_id'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN stripe_customer_id VARCHAR(255)")
+    except Exception as e:
+        print(f"Aviso ao verificar/adicionar coluna stripe_customer_id: {e}")
+
+    try:
+        cursor.execute("SHOW COLUMNS FROM usuarios LIKE 'stripe_subscription_id'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN stripe_subscription_id VARCHAR(255)")
+    except Exception as e:
+        print(f"Aviso ao verificar/adicionar coluna stripe_subscription_id: {e}")
+
     # 2. Tabela de Tokens para Reset de Senha (expiração e controle de uso)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reset_tokens (

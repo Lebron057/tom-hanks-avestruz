@@ -151,6 +151,7 @@ async def register(data: RegisterRequest):
                 "nome": data.nome.strip(),
                 "email": data.email.strip().lower(),
                 "role": user_role,
+                "premium": False,
             },
         }
     finally:
@@ -171,7 +172,7 @@ async def login(data: LoginRequest):
 
     try:
         cursor.execute(
-            "SELECT id, nome, email, senha_hash, role FROM usuarios WHERE email = %s",
+            "SELECT id, nome, email, senha_hash, role, premium FROM usuarios WHERE email = %s",
             (data.email.strip().lower(),),
         )
         usuario = cursor.fetchone()
@@ -183,11 +184,13 @@ async def login(data: LoginRequest):
             )
 
         user_role = usuario.get("role") or "user"
+        is_premium = bool(usuario.get("premium", False))
         token = create_access_token(
             usuario_id=usuario["id"],
             nome=usuario["nome"],
             email=usuario["email"],
             role=user_role,
+            premium=is_premium,
         )
 
         # ── Evento de auditoria: login bem-sucedido ──
@@ -205,6 +208,7 @@ async def login(data: LoginRequest):
                 nome=usuario["nome"],
                 email=usuario["email"],
                 role=user_role,
+                premium=is_premium,
             ),
         )
     finally:
@@ -247,11 +251,32 @@ async def verify_session(
             detail="Token inválido ou expirado.",
         )
 
+    # Consulta ao MariaDB para dados sempre atualizados (Enforcement Centralizado / Padrão A)
+    # Permite que status premium e role reflitam instantaneamente sem relogin
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, nome, email, role, premium FROM usuarios WHERE id = %s",
+            (int(payload["sub"]),),
+        )
+        usuario = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuário não encontrado.",
+        )
+
     return UserResponse(
-        id=int(payload["sub"]),
-        nome=payload.get("nome", ""),
-        email=payload.get("email", ""),
-        role=payload.get("role", "user"),
+        id=usuario["id"],
+        nome=usuario["nome"],
+        email=usuario["email"],
+        role=usuario.get("role") or "user",
+        premium=bool(usuario.get("premium", False)),
     )
 
 
