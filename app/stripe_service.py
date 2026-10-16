@@ -37,10 +37,10 @@ def create_premium_checkout_session(
     success_url = f"{base_url.rstrip('/')}/catalog?premium_success=true"
     cancel_url = f"{base_url.rstrip('/')}/profile/{usuario_id}?canceled=true"
 
-    session = stripe.checkout.Session.create(
-        payment_method_types=["card"],
-        mode="subscription",
-        line_items=[
+    session_params = {
+        "payment_method_types": ["card"],
+        "mode": "subscription",
+        "line_items": [
             {
                 "price_data": {
                     "currency": "brl",
@@ -56,15 +56,21 @@ def create_premium_checkout_session(
                 "quantity": 1,
             }
         ],
-        customer_email=user_email,
-        client_reference_id=str(usuario_id),
-        metadata={
+        "client_reference_id": str(usuario_id),
+        "metadata": {
             "usuario_id": str(usuario_id),
             "user_nome": user_nome,
         },
-        success_url=success_url,
-        cancel_url=cancel_url,
-    )
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+    }
+
+    # Apenas repassa customer_email pré-preenchido se tiver formato válido com TLD (.com, etc.)
+    # Caso contrário, o Stripe Checkout permite ao cliente preencher o e-mail de faturamento com segurança
+    if user_email and "@" in user_email and "." in user_email.split("@")[-1]:
+        session_params["customer_email"] = user_email
+
+    session = stripe.checkout.Session.create(**session_params)
     return session
 
 

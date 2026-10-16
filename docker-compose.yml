@@ -32,6 +32,7 @@ services:
     restart: unless-stopped
 
   auth-service:
+    build: .
     image: lebron057/auth-service:latest
     container_name: auth-service-iago
     command: ["uvicorn", "auth_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
@@ -57,6 +58,7 @@ services:
     restart: unless-stopped
 
   log-service:
+    build: .
     image: lebron057/log-service:latest
     container_name: log-service-iago
     command: ["uvicorn", "log_service.main:app", "--host", "0.0.0.0", "--port", "8002"]

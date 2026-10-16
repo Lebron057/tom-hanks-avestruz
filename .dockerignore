@@ -1,0 +1,8 @@
+.env
+.git
+__pycache__/
+*.pyc
+prints/
+slides/
+docs/
+tests/
