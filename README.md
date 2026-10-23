@@ -1,8 +1,15 @@
 # 🎬 Catálogo de Filmes — Tom Hanks (Arquitetura de Microsserviços)
 
-Aplicação web desenvolvida em arquitetura de microsserviços com Python (FastAPI) e Docker. Permite explorar a filmografia de Tom Hanks ao vivo da API TMDB, favoritar filmes, comentar, controlar papéis de acesso, redefinir senhas com envio de e-mails via Mailtrap, registrar logs de auditoria centralizados com Redis Streams, e gerenciar um **perfil de usuário com foto e biografia** armazenadas no **MinIO** (Object Storage).
+> 📖 **Documentação Técnica Completa:** Acesse o arquivo [DOCUMENTACAO.md](DOCUMENTACAO.md) para a especificação funcional detalhada de engenharia reversa, diagramas de arquitetura Mermaid, catálogo completo de regras de negócio ("Se X, Então Y") e modelagem conceitual/lógica do banco de dados.
 
-**Professor:** [@siriani](https://github.com/siriani)
+Aplicação web desenvolvida em arquitetura de microsserviços com Python (FastAPI) e Docker. Permite explorar a filmografia de Tom Hanks ao vivo da API TMDB, favoritar filmes, comentar, controlar papéis de acesso (RBAC), redefinir senhas com envio de e-mails via Mailtrap, registrar logs de auditoria centralizados com Redis Streams, e gerenciar um **perfil de usuário com foto e biografia** armazenadas no **MinIO** (Object Storage), além de cobrança recorrente via **Stripe**.
+
+- **Disciplina:** Introdução à Computação em Nuvem (ISW055)
+- **Professor:** [@siriani](https://github.com/siriani)
+- **Aluno:** Iago Amorim Lebron de Lima
+- **Identificador de Tenant:** `IAC_2026_02_iago_lima`
+- **Porta Reservada no Host:** `8210`
+- **Subdomínio de Borda:** `iago-lima.lapps.studio`
 
 ---
 
@@ -163,6 +170,24 @@ No **Padrão B**, o `role` seria incluído diretamente dentro do payload (claims
 
 ---
 
+## ☁️ Matriz de Responsabilidade em Nuvem (SaaS, PaaS, IaaS)
+
+A infraestrutura do projeto foi categorizada de acordo com os modelos de serviço de computação em nuvem (NIST / Cloud Computing Taxonomy), mapeando os níveis de abstração e gestão operacional:
+
+| Modelo de Serviço | Componente / Elemento da Pilha | Justificativa Técnica e Escopo de Responsabilidade |
+| :---: | :--- | :--- |
+| **IaaS** *(Infrastructure as a Service)* | **Cluster On-Premises / Proxmox VM / Host Ubuntu** | Onde a infraestrutura física, a virtualização (Proxmox VE), o Sistema Operacional Linux e a Docker Engine foram provisionados e são administrados manualmente pela equipe/laboratório multi-tenant. |
+| **IaaS** *(Infrastructure as a Service)* | **Instância GCP `e2-micro` (Always Free)** | Máquina virtual pública (`35.226.64.52`) provisionada na Google Cloud Platform atuando como **Relay TCP / Servidor FRP** para contornar o CGNAT (*Carrier-Grade NAT*) da rede interna física da FATEC. |
+| **PaaS** *(Platform as a Service)* | **Containers da Aplicação no Docker Engine / Portainer** | Os serviços (`catalog-service`, `auth-service`, `log-service`, `MinIO` e `Redis`) são empacotados como imagens OCI. A plataforma (Docker/Portainer) gerencia execução, isolamento de rede (`internal-net`) e portas sem exigir reinstalação ou gestão do SO host por container. |
+| **PaaS** *(Platform as a Service)* | **MariaDB Gerenciado / Instância de Banco (DBaaS Lógico)** | Utilizado como serviço de banco de dados gerenciado individual por aluno (`IAC_2026_02_iago_lima`), desacoplando a aplicação da administração e manutenção do SGBD subjacente. |
+| **SaaS** *(Software as a Service)* | **Stripe (Checkout & Assinaturas)** | Plataforma pronta consumida exclusivamente via API REST e Webhooks para processamento seguro de pagamentos e checkout sem tocar em infraestrutura ou armazenar cartões. |
+| **SaaS** *(Software as a Service)* | **TMDB (The Movie Database)** | Serviço de catálogo de entretenimento consumido via API REST e CDN para busca em tempo real da filmografia e posters de Tom Hanks, sem persistência estática local. |
+| **SaaS** *(Software as a Service)* | **Mailtrap (SMTP Transacional)** | Serviço pronto de entrega de e-mails em nuvem consumido via protocolo SMTP para disparo das mensagens de recuperação de senha com tokens de 30 minutos. |
+
+> 📌 **Documentação Completa de Arquitetura e Regras:** Para diagramas de blocos Mermaid detalhados, catálogo de regras de negócio ("Se X, Então Y") e modelagem de dados completa, consulte o arquivo [DOCUMENTACAO.md](DOCUMENTACAO.md).
+
+---
+
 ## ⚙️ Como Rodar Localmente
 
 ### 1. Clonar o repositório
@@ -244,6 +269,7 @@ Acesse no navegador:
 ├── docker-compose.yml          # Orquestração com rede internal-net (incl. redis + log-service + minio)
 ├── requirements.txt            # Dependências Python (incl. redis, minio)
 ├── .env.example                # Modelo de variáveis de ambiente
+├── DOCUMENTACAO.md            # Documentação técnica reversa, arquitetura Mermaid, regras de negócio e modelo ER
 └── README.md                   # Documentação do projeto
 ```
 
